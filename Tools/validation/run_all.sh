@@ -55,9 +55,12 @@ for f in files:
 imports = set()
 for f in files:
     imports |= set(re.findall(r'^\s*import\s+(\w+)', f.read_text(), re.M))
+# Apple system frameworks only. The point of this check is that no package
+# has crept in, so every name here must ship with the SDK.
 allowed = {"Foundation","SwiftUI","MapKit","CoreLocation","CoreMotion","Combine",
            "SQLite3","Compression","CryptoKit","XCTest","UIKit","os","OSLog",
-           "UniformTypeIdentifiers","Darwin"}
+           "UniformTypeIdentifiers","Darwin","CoreGraphics","Charts","Photos",
+           "ImageIO","QuartzCore","Accelerate","Security"}
 third = imports - allowed
 if third:
     print(f"  third-party imports present: {sorted(third)}"); bad += 1
