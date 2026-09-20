@@ -39,6 +39,16 @@ public final class SQLiteDatabase {
     private var handle: OpaquePointer?
     private let queue: DispatchQueue
     private var statementCache: [String: OpaquePointer] = [:]
+    private var statementOrder: [String] = []
+
+    /// Ceiling on cached prepared statements.
+    ///
+    /// Most queries in the app are fixed strings, so the cache would normally
+    /// settle at a couple of dozen. One is not: the bulk segment lookup builds
+    /// its placeholder list from the chunk size, so a partial final chunk
+    /// produces a distinct statement each time. Without a cap those accumulate
+    /// for the life of the connection.
+    private static let statementCacheLimit = 64
 
     /// - Parameter readOnly: city packs are opened read-only so a corrupt or
     ///   hostile pack cannot be used to mutate anything on disk.
@@ -213,7 +223,19 @@ public final class SQLiteDatabase {
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
             throw Error.prepareFailed(lastErrorMessage(), sql: sql)
         }
+
+        // Safe to finalise an evicted statement here: everything runs on one
+        // serial queue and no statement is held across calls, so nothing can
+        // be mid-step while this runs.
+        if statementOrder.count >= Self.statementCacheLimit, let oldest = statementOrder.first {
+            statementOrder.removeFirst()
+            if let evicted = statementCache.removeValue(forKey: oldest) {
+                sqlite3_finalize(evicted)
+            }
+        }
+
         statementCache[sql] = statement
+        statementOrder.append(sql)
         return statement
     }
 
