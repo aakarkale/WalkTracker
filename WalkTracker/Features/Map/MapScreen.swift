@@ -2,7 +2,7 @@ import SwiftUI
 import MapKit
 import UIKit
 
-/// The primary screen: the city map, the walk control, and whatever the user
+/// The primary screen: the city map, the record control, and whatever the user
 /// has to do next before a walk can be recorded.
 struct MapScreen: View {
 
@@ -44,26 +44,36 @@ private struct MapScreenBody: View {
             .ignoresSafeArea()
             .accessibilityLabel(String(localized: "Map of the city. Streets you have walked are drawn in green."))
 
-            VStack(spacing: 12) {
-                headerCard
+            VStack(spacing: 0) {
+                floatingControls
 
                 Spacer(minLength: 0)
 
-                statusCard
+                VStack(spacing: 14) {
+                    statusCard
 
-                WalkControlBar(
-                    engine: engine,
-                    isReady: isReady,
-                    onStart: { environment.startWalk() },
-                    onStop: { environment.stopWalk() }
-                )
+                    WalkControlBar(
+                        engine: engine,
+                        stats: environment.cityStats,
+                        isReady: isReady,
+                        onStart: { environment.startWalk() },
+                        onStop: { environment.stopWalk() }
+                    )
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+                .background(bottomFade)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
         }
         .sheet(isPresented: $showingCities) {
             NavigationStack {
                 CityListScreen()
+            }
+        }
+        .sheet(item: $environment.pendingSummary) { summary in
+            WalkSummaryScreen(summary: summary) {
+                environment.pendingSummary = nil
             }
         }
         .onAppear {
@@ -81,102 +91,96 @@ private struct MapScreenBody: View {
             loader.coverageChanged()
         }
         .onChange(of: engine.segmentsTouchedThisWalk.count) { _, _ in
-            // Streets claimed during this walk should turn green without
-            // waiting for the walk to end.
+            // Streets claimed during this walk turn green without waiting for
+            // the walk to end.
             loader.coverageChanged()
         }
     }
 
-    // MARK: - Header
+    // MARK: - Floating controls
 
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Button {
-                    showingCities = true
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(environment.selectedCity?.name ?? String(localized: "No city selected"))
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                        Text(coverageSubtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "City and progress"))
-                .accessibilityValue(
-                    "\(environment.selectedCity?.name ?? String(localized: "No city selected")), \(coverageSubtitle)"
-                )
-                .accessibilityHint(String(localized: "Opens the list of cities"))
+    /// Small floating controls rather than a navigation bar, so the map stays
+    /// full bleed.
+    private var floatingControls: some View {
+        HStack(alignment: .top, spacing: 10) {
+            cityChip
 
-                if loader.isLoading || environment.isPreparingCity {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel(String(localized: "Loading streets"))
-                }
-
-                Button {
-                    followRequest += 1
-                } label: {
-                    Image(systemName: "location")
-                        .font(.body)
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!environment.hasLocationAccess)
-                .accessibilityLabel(String(localized: "Centre the map on my location"))
-            }
-
-            if environment.packContext != nil {
-                legend
-            }
-        }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private var legend: some View {
-        HStack(spacing: 16) {
-            legendItem(color: WalkPalette.walked, text: String(localized: "Walked"))
-            legendItem(color: WalkPalette.unwalked, text: String(localized: "Still to walk"))
             Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .combine)
-    }
 
-    private func legendItem(color: Color, text: String) -> some View {
-        HStack(spacing: 6) {
-            Capsule()
-                .fill(color)
-                .frame(width: 18, height: 4)
-            Text(text)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var coverageSubtitle: String {
-        guard let stats = environment.cityStats else {
-            if environment.selectedCity == nil {
-                return String(localized: "Choose where you walk")
+            if loader.isLoading || environment.isPreparingCity || environment.isPreparingSummary {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 44, height: 44)
+                    .background(floatingBackground)
+                    .accessibilityLabel(String(localized: "Loading streets"))
             }
-            return String(localized: "No street data yet")
+
+            Button {
+                followRequest += 1
+            } label: {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(environment.hasLocationAccess ? WalkPalette.accent : WalkPalette.secondaryInk)
+                    .frame(width: 44, height: 44)
+                    .background(floatingBackground)
+            }
+            .disabled(!environment.hasLocationAccess)
+            .accessibilityLabel(String(localized: "Centre the map on my location"))
         }
-        let percent = WalkFormat.percentage(
-            stats.displayPercentage,
-            startedButBelowResolution: stats.walkedMetres > 0
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+    }
+
+    private var cityChip: some View {
+        Button {
+            showingCities = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(WalkPalette.accent)
+
+                Text(environment.selectedCity?.name ?? String(localized: "Choose a city"))
+                    .font(WalkType.cardTitle)
+                    .foregroundStyle(WalkPalette.ink)
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .background(floatingBackground)
+        }
+        .accessibilityLabel(String(localized: "Current city"))
+        .accessibilityValue(environment.selectedCity?.name ?? String(localized: "None selected"))
+        .accessibilityHint(String(localized: "Opens the list of cities"))
+    }
+
+    private var floatingBackground: some View {
+        Capsule(style: .continuous)
+            .fill(WalkPalette.card)
+            .shadow(color: WalkPalette.cardShadow, radius: 10, x: 0, y: 2)
+    }
+
+    /// Keeps the bar and the pill readable wherever the map happens to be dark,
+    /// without putting a hard edged panel over the bottom of the screen.
+    private var bottomFade: some View {
+        LinearGradient(
+            colors: [
+                WalkPalette.background.opacity(0),
+                WalkPalette.background.opacity(0.75),
+                WalkPalette.background.opacity(0.95)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
         )
-        let blocks = WalkFormat.blocks(completed: stats.completedBlocks, total: stats.totalBlocks)
-        return String(localized: "\(percent) walked, \(blocks)")
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
     }
 
     // MARK: - Status
 
-    /// The one thing standing between the user and a recorded walk, if there
-    /// is one. Ordered by what has to happen first.
+    /// The one thing standing between the user and a recorded walk, if there is
+    /// one. Ordered by what has to happen first.
     @ViewBuilder
     private var statusCard: some View {
         if let fraction = environment.rebuildFraction {
@@ -190,7 +194,7 @@ private struct MapScreenBody: View {
             MapInfoCard(
                 icon: "mappin.and.ellipse",
                 title: String(localized: "Choose a city"),
-                message: String(localized: "Pick the city you walk in and WalkTracker will keep track of the streets you have covered."),
+                message: String(localized: "Pick the city you walk in and every street you cover starts filling in green."),
                 actionTitle: String(localized: "Choose a city"),
                 action: { showingCities = true }
             )
@@ -299,8 +303,9 @@ private struct MapScreenBody: View {
 
 // MARK: - Card
 
-/// One piece of guidance on top of the map, with an optional progress bar and
-/// an optional single action.
+/// One piece of guidance over the map, with an optional progress bar and an
+/// optional single action. Every empty or blocked state on this screen uses it,
+/// so the user is never looking at a map with nothing to do and no explanation.
 private struct MapInfoCard: View {
 
     let icon: String
@@ -311,25 +316,29 @@ private struct MapInfoCard: View {
     var action: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 Image(systemName: icon)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(WalkPalette.accent)
+
+                Text(title)
+                    .font(WalkType.cardTitle)
+                    .foregroundStyle(WalkPalette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if !message.isEmpty {
                 Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(WalkType.caption)
+                    .foregroundStyle(WalkPalette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let progress {
                 ProgressView(value: min(1, max(0, progress)))
-                    .tint(WalkPalette.walked)
+                    .tint(WalkPalette.accent)
                     .accessibilityLabel(String(localized: "Progress"))
                     .accessibilityValue(WalkFormat.compactPercentage(fraction: progress))
             }
@@ -337,15 +346,12 @@ private struct MapInfoCard: View {
             if let actionTitle, let action {
                 Button(action: action) {
                     Text(actionTitle)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .buttonStyle(SmallPillButtonStyle())
                 .accessibilityLabel(actionTitle)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .walkCard(padding: 20)
     }
 }

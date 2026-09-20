@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreGraphics
 import CoreLocation
 
 // MARK: - Services
@@ -139,6 +140,9 @@ final class AppEnvironment: ObservableObject {
     let engine: TrackingEngine
     let authorization: AuthorizationObserver
     let haptics = Haptics()
+    /// Records walks on its own, when the user has asked it to. Off unless
+    /// they switch it on in Settings.
+    let passiveTracking: PassiveTrackingCoordinator
 
     // MARK: Published state
 
@@ -153,8 +157,6 @@ final class AppEnvironment: ObservableObject {
     /// Bumped whenever stored coverage changes, so the map knows to reload
     /// without every view having to observe the database.
     @Published private(set) var coverageRevision = 0
-    /// New street unlocked so far this week, across every city.
-    @Published private(set) var weeklyNewCoverageMetres: Double = 0
     /// Set when a walk ends, cleared when the summary is dismissed.
     @Published var pendingSummary: WalkSummary?
     @Published private(set) var isPreparingSummary = false
@@ -183,13 +185,9 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// Weekly target for new street, in metres. Metres because everything
-    /// inside the app is metres: only `WalkFormat` knows about miles.
-    @Published var weeklyGoalMetres: Double {
-        didSet { defaults.set(weeklyGoalMetres, forKey: Keys.weeklyGoalMetres) }
-    }
-
-    static let defaultWeeklyGoalMetres: Double = 5_000
+    /// Mirrors the coordinator's own flag so the Settings toggle has something
+    /// to bind to. Never set here without going through `setPassiveTracking`.
+    @Published private(set) var passiveTrackingEnabled = false
 
     private let defaults = UserDefaults.standard
     private var authorizationSubscription: AnyCancellable?
@@ -206,7 +204,7 @@ final class AppEnvironment: ObservableObject {
         static let onboardingCompleted = "onboardingCompleted"
         static let includeOptionalWays = "includeOptionalWays"
         static let hapticsEnabled = "hapticsEnabled"
-        static let weeklyGoalMetres = "weeklyGoalMetres"
+        static let passiveTrackingEnabled = "passiveTrackingEnabled"
     }
 
     var catalog: CityCatalog { services.catalog }
@@ -216,23 +214,30 @@ final class AppEnvironment: ObservableObject {
     init(services: CoreServices) {
         self.services = services
 
+        // Locals first: the stored properties are not all initialised yet, so
+        // nothing here can reach through `self`.
         let tracker = LocationTracker()
-        self.tracker = tracker
-        self.engine = TrackingEngine(
+        let engine = TrackingEngine(
             tracker: tracker,
             sessionStore: services.sessionStore,
             coverageStore: services.coverageStore
         )
+
+        self.tracker = tracker
+        self.engine = engine
         self.authorization = AuthorizationObserver()
+        self.passiveTracking = PassiveTrackingCoordinator(
+            tracker: tracker,
+            detector: WalkingDetector(),
+            engine: engine
+        )
 
         let defaults = UserDefaults.standard
         self.hasCompletedOnboarding = defaults.bool(forKey: Keys.onboardingCompleted)
         self.includeOptionalWays = defaults.bool(forKey: Keys.includeOptionalWays)
-        // Absent means "never set", which for haptics is on and for the goal is
-        // the default target. `bool(forKey:)` alone cannot tell those apart.
+        // Absent means "never set", which for haptics is on. `bool(forKey:)`
+        // alone cannot tell "never set" from "set to false".
         self.hapticsEnabled = defaults.object(forKey: Keys.hapticsEnabled) as? Bool ?? true
-        self.weeklyGoalMetres = defaults.object(forKey: Keys.weeklyGoalMetres) as? Double
-            ?? Self.defaultWeeklyGoalMetres
 
         haptics.isEnabled = hapticsEnabled
 
@@ -305,7 +310,7 @@ final class AppEnvironment: ObservableObject {
 
         await refreshInstallStates()
         await restoreSelectedCity()
-        await refreshWeeklyProgress()
+        restorePassiveTracking()
         await pruneStalePackFiles()
     }
 
@@ -325,6 +330,30 @@ final class AppEnvironment: ObservableObject {
                 try? FileManager.default.removeItem(at: url)
             }
         }.value
+    }
+
+    // MARK: Automatic tracking
+
+    /// Restores the user's choice, after the selected city has been opened so
+    /// that a walk started automatically has a pack to match against.
+    private func restorePassiveTracking() {
+        let enabled = defaults.bool(forKey: Keys.passiveTrackingEnabled)
+        guard enabled else { return }
+        passiveTracking.setEnabled(true)
+        passiveTrackingEnabled = passiveTracking.isEnabled
+    }
+
+    func setPassiveTracking(_ enabled: Bool) {
+        passiveTracking.setEnabled(enabled)
+        passiveTrackingEnabled = passiveTracking.isEnabled
+        defaults.set(passiveTrackingEnabled, forKey: Keys.passiveTrackingEnabled)
+    }
+
+    /// Call when the app comes back to the foreground: iOS may have delivered
+    /// a significant-change wake while it was suspended.
+    func refreshPassiveTracking() {
+        guard passiveTrackingEnabled else { return }
+        passiveTracking.refresh()
     }
 
     // MARK: Cities
@@ -368,9 +397,11 @@ final class AppEnvironment: ObservableObject {
 
         let services = self.services
         let opened = await Task.detached(priority: .userInitiated) { () -> PackContext? in
-            guard city.pack != nil, services.downloader.isInstalled(city) else { return nil }
-            let url = services.downloader.installedURL(for: city)
-            guard let store = try? CityPackStore(path: url.path) else { return nil }
+            // A nil URL means the city has no pack descriptor at all, so there
+            // is no version to build a filename from and nothing to open.
+            guard let url = services.downloader.installedURL(for: city),
+                  services.downloader.isInstalled(city),
+                  let store = try? CityPackStore(path: url.path) else { return nil }
             return PackContext(city: city, store: store)
         }.value
 
@@ -565,7 +596,6 @@ final class AppEnvironment: ObservableObject {
 
         Task {
             await refreshCityStats()
-            await refreshWeeklyProgress()
             if let finishedSessionID {
                 await prepareSummary(sessionID: finishedSessionID, before: before)
             }
@@ -717,27 +747,6 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// New street unlocked since the start of this week, across every city.
-    func refreshWeeklyProgress() async {
-        let services = self.services
-        let startOfWeek = Calendar.current.dateInterval(of: .weekOfYear, for: Date())?.start
-            ?? Date().addingTimeInterval(-7 * 24 * 3_600)
-
-        let total = await Task.detached(priority: .utility) { () -> Double in
-            let sessions = (try? services.sessionStore.recentSessions(cityID: nil, limit: 500)) ?? []
-            return sessions
-                .filter { $0.startedAt >= startOfWeek }
-                .reduce(0) { $0 + $1.newCoverageMetres }
-        }.value
-
-        weeklyNewCoverageMetres = total
-    }
-
-    var weeklyGoalFraction: Double {
-        guard weeklyGoalMetres > 0 else { return 0 }
-        return min(1, weeklyNewCoverageMetres / weeklyGoalMetres)
-    }
-
     // MARK: Permissions
 
     var authorizationStatus: CLAuthorizationStatus { authorization.status }
@@ -791,6 +800,30 @@ final class AppEnvironment: ObservableObject {
         return url
     }
 
+    // MARK: Share card
+
+    /// The user's walked streets, normalised into unit space for the share
+    /// card.
+    ///
+    /// Both halves run off the main thread: this reads every walked block in
+    /// the city out of the pack, which is far too much work to do while the
+    /// summary screen is on screen.
+    func walkedStreetGeometry(limit: Int = 6_000) async -> [[CGPoint]] {
+        guard let context = packContext, let cityID = selectedCity?.id else { return [] }
+
+        let services = self.services
+        return await Task.detached(priority: .userInitiated) { () -> [[CGPoint]] in
+            let walked = (try? services.coverageStore.completedSegmentIDs(forCity: cityID)) ?? []
+            guard !walked.isEmpty else { return [] }
+
+            let segments = context.store.segments(in: context.store.meta.bounds, limit: limit)
+            let runs = segments
+                .filter { walked.contains($0.id) }
+                .map { $0.geometry.coordinates }
+            return RouteGeometry.normalise(runs: runs, limitPerRun: 24)
+        }.value
+    }
+
     // MARK: Deleting data
 
     func deleteUserData(forCity city: City) async {
@@ -805,7 +838,6 @@ final class AppEnvironment: ObservableObject {
         coverageRevision += 1
         lastKnownCompletedBlocks = 0
         await refreshCityStats()
-        await refreshWeeklyProgress()
     }
 
     func deleteAllUserData() async {
@@ -820,7 +852,6 @@ final class AppEnvironment: ObservableObject {
         lastKnownCompletedBlocks = 0
         pendingSummary = nil
         await refreshCityStats()
-        await refreshWeeklyProgress()
     }
 
     // MARK: Errors

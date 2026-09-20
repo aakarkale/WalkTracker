@@ -19,7 +19,24 @@ public struct CoverageCalculator {
         public let completedBlocks: Int
         public let totalBlocks: Int
 
-        public var fraction: Double {
+        /// Share of blocks finished. This is the headline figure.
+        ///
+        /// Deliberately block-based rather than length-based, so it agrees
+        /// with the "1,301 of 36,402 blocks" counter shown beside it. A
+        /// percentage derived from metres would disagree with that count and
+        /// read as a bug, and "blocks" is the unit people actually think in.
+        public var blockFraction: Double {
+            totalBlocks > 0 ? min(1, Double(completedBlocks) / Double(totalBlocks)) : 0
+        }
+
+        /// Share of walkable distance covered, counting partial blocks.
+        ///
+        /// Finer grained than `blockFraction` because a half-walked block
+        /// counts for half, and it weights a long avenue block above a short
+        /// side street. Kept for the detail view and for progress that has not
+        /// yet tipped any block over the completion threshold, where the block
+        /// count would still read zero.
+        public var lengthFraction: Double {
             totalMetres > 0 ? min(1, walkedMetres / totalMetres) : 0
         }
 
@@ -29,13 +46,21 @@ public struct CoverageCalculator {
         /// while streets are still missing. That is the one number in this app
         /// that must never overstate.
         public var displayPercentage: Double {
-            let raw = fraction * 100
+            let raw = blockFraction * 100
             guard raw < 100 else { return 100 }
-            return (raw * 10).rounded(.down) / 10
+            // Two decimals: at city scale a single walk moves the figure by a
+            // hundredth, and a number that never visibly changes is worse than
+            // no number.
+            return (raw * 100).rounded(.down) / 100
         }
 
         public var isComplete: Bool {
             totalBlocks > 0 && completedBlocks >= totalBlocks
+        }
+
+        /// Blocks still to walk.
+        public var remainingBlocks: Int {
+            max(0, totalBlocks - completedBlocks)
         }
     }
 
@@ -47,7 +72,12 @@ public struct CoverageCalculator {
         public let completedBlocks: Int
         public let totalBlocks: Int
 
+        /// Block-based, matching the city figure.
         public var fraction: Double {
+            totalBlocks > 0 ? min(1, Double(completedBlocks) / Double(totalBlocks)) : 0
+        }
+
+        public var lengthFraction: Double {
             totalMetres > 0 ? min(1, walkedMetres / totalMetres) : 0
         }
     }

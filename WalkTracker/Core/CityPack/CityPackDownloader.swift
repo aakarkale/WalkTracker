@@ -11,6 +11,7 @@ import CryptoKit
 public final class CityPackDownloader: NSObject {
 
     public enum DownloadError: Error, LocalizedError {
+        case noPackAvailable(cityName: String)
         case insecureBaseURL
         case invalidURL
         case httpStatus(Int)
@@ -20,6 +21,8 @@ public final class CityPackDownloader: NSObject {
 
         public var errorDescription: String? {
             switch self {
+            case .noPackAvailable(let cityName):
+                return "Street data for \(cityName) has not been published yet."
             case .insecureBaseURL:
                 return "City packs can only be downloaded over HTTPS."
             case .invalidURL:
@@ -66,6 +69,12 @@ public final class CityPackDownloader: NSObject {
         city: City,
         onProgress: (@Sendable (Progress) -> Void)? = nil
     ) async throws -> URL {
+        // A city in the catalog with no pack descriptor has no street data
+        // built yet. There is nothing to fetch and nothing to verify against,
+        // so this fails here rather than constructing a URL from nothing.
+        guard let pack = city.pack else {
+            throw DownloadError.noPackAvailable(cityName: city.name)
+        }
         guard baseURL.scheme?.lowercased() == "https" else { throw DownloadError.insecureBaseURL }
 
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
@@ -76,7 +85,7 @@ public final class CityPackDownloader: NSObject {
         var path = components.percentEncodedPath
         if !path.hasSuffix("/") { path += "/" }
         components.percentEncodedPath = path
-        guard let url = URL(string: city.pack.path, relativeTo: components.url)?.absoluteURL,
+        guard let url = URL(string: pack.path, relativeTo: components.url)?.absoluteURL,
               url.scheme?.lowercased() == "https",
               url.host == baseURL.host else {
             throw DownloadError.invalidURL
@@ -90,12 +99,12 @@ public final class CityPackDownloader: NSObject {
 
         // Verified before anything parses the bytes.
         let digest = SHA256.hash(data: compressed).map { String(format: "%02x", $0) }.joined()
-        guard digest.caseInsensitiveCompare(city.pack.sha256) == .orderedSame else {
-            throw DownloadError.digestMismatch(expected: city.pack.sha256, actual: digest)
+        guard digest.caseInsensitiveCompare(pack.sha256) == .orderedSame else {
+            throw DownloadError.digestMismatch(expected: pack.sha256, actual: digest)
         }
 
         let decompressed = try GzipDecoder.decompress(compressed)
-        return try installAtomically(decompressed, city: city)
+        return try installAtomically(decompressed, city: city, version: pack.version)
     }
 
     private func download(
@@ -141,19 +150,28 @@ public final class CityPackDownloader: NSObject {
 
     // MARK: - Filesystem
 
-    public func installedURL(for city: City) -> URL {
-        packsDirectory.appendingPathComponent("\(city.id).v\(city.pack.version).sqlite")
+    /// Where a city's pack lives once installed, or nil when the city has no
+    /// pack published. Nil rather than a guessed filename: a path built from a
+    /// version that does not exist would silently never match anything on disk.
+    public func installedURL(for city: City) -> URL? {
+        guard let pack = city.pack else { return nil }
+        return installedURL(cityID: city.id, version: pack.version)
+    }
+
+    private func installedURL(cityID: String, version: Int) -> URL {
+        packsDirectory.appendingPathComponent("\(cityID).v\(version).sqlite")
     }
 
     public func isInstalled(_ city: City) -> Bool {
-        FileManager.default.fileExists(atPath: installedURL(for: city).path)
+        guard let url = installedURL(for: city) else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
-    private func installAtomically(_ data: Data, city: City) throws -> URL {
+    private func installAtomically(_ data: Data, city: City, version: Int) throws -> URL {
         let manager = FileManager.default
         try manager.createDirectory(at: packsDirectory, withIntermediateDirectories: true)
 
-        let destination = installedURL(for: city)
+        let destination = installedURL(cityID: city.id, version: version)
         let temporary = packsDirectory.appendingPathComponent("\(city.id).\(UUID().uuidString).tmp")
 
         do {
@@ -187,7 +205,7 @@ public final class CityPackDownloader: NSObject {
     /// Removes an installed pack. The user's walk history is untouched: it
     /// lives in a different database entirely.
     public func uninstall(_ city: City) throws {
-        let url = installedURL(for: city)
+        guard let url = installedURL(for: city) else { return }
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
@@ -195,7 +213,7 @@ public final class CityPackDownloader: NSObject {
 
     /// Older versions of a city's pack, left behind after an update.
     public func staleFiles(keeping cities: [City]) -> [URL] {
-        let keep = Set(cities.map { installedURL(for: $0).lastPathComponent })
+        let keep = Set(cities.compactMap { installedURL(for: $0)?.lastPathComponent })
         let contents = (try? FileManager.default.contentsOfDirectory(
             at: packsDirectory,
             includingPropertiesForKeys: nil

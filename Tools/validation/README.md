@@ -23,6 +23,7 @@ cd Tools/validation
 python3 interval_ref.py     # interval merging, unit cases plus fuzz
 python3 geom_codec.py       # pack geometry encode/decode and malformed input
 python3 final_eval.py       # map matching against simulated walks
+python3 gpx_ref.py          # GPX parsing rules
 python3 sweep.py            # compares matcher variants (slow, a few minutes)
 ```
 
@@ -49,6 +50,7 @@ cd ../validation && python3 e2e_pack.py   # expects the pack beside it
 | `final_eval.py` | Precision and recall of the chosen configuration | end to end |
 | `sweep.py` | The variant comparison the configuration was chosen from | tuning record |
 | `e2e_pack.py` | A real built pack read by the decoder and walked by the matcher | pipeline to app |
+| `gpx_ref.py` | GPX parsing, gap splitting and malformed-point handling | `Coverage/GPXImporter.swift` |
 
 ## Results as of the last run
 

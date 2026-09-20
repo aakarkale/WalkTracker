@@ -6,6 +6,13 @@ public protocol LocationTrackerDelegate: AnyObject {
     func locationTracker(_ tracker: LocationTracker, didReceive locations: [CLLocation])
     func locationTracker(_ tracker: LocationTracker, didChange status: CLAuthorizationStatus)
     func locationTracker(_ tracker: LocationTracker, didFailWith error: Error)
+    /// The device has moved far enough for iOS to wake the app. Cheap, coarse,
+    /// and the only thing that runs while nothing else is tracking.
+    func locationTrackerDidObserveSignificantChange(_ tracker: LocationTracker)
+}
+
+public extension LocationTrackerDelegate {
+    func locationTrackerDidObserveSignificantChange(_ tracker: LocationTracker) {}
 }
 
 /// Wraps CoreLocation and CoreMotion for continuous walk tracking.
@@ -31,6 +38,7 @@ public final class LocationTracker: NSObject {
     private let motionQueue = OperationQueue()
 
     public private(set) var isTracking = false
+    public private(set) var isWatchingSignificantChanges = false
     /// Latest motion classification. Nil when Core Motion is unavailable or
     /// permission was refused, in which case tracking proceeds without the gate.
     public private(set) var currentActivity: CMMotionActivity?
@@ -121,6 +129,30 @@ public final class LocationTracker: NSObject {
         manager.distanceFilter = enabled ? 25 : kCLDistanceFilterNone
     }
 
+    // MARK: - Significant change monitoring
+
+    /// Starts the low-power watch that lets the app notice a walk beginning
+    /// without keeping GPS on.
+    ///
+    /// Significant-change monitoring costs almost nothing: it piggybacks on
+    /// cell and wifi transitions the phone is making anyway, fires roughly
+    /// every 500 m, and relaunches the app if iOS has terminated it. It is far
+    /// too coarse to record a route, which is why it only decides whether to
+    /// look more closely.
+    public func startWatchingSignificantChanges() {
+        guard CLLocationManager.significantLocationChangeMonitoringAvailable() else { return }
+        guard manager.authorizationStatus == .authorizedAlways else { return }
+        guard !isWatchingSignificantChanges else { return }
+        isWatchingSignificantChanges = true
+        manager.startMonitoringSignificantLocationChanges()
+    }
+
+    public func stopWatchingSignificantChanges() {
+        guard isWatchingSignificantChanges else { return }
+        isWatchingSignificantChanges = false
+        manager.stopMonitoringSignificantLocationChanges()
+    }
+
     private func startMotionUpdates() {
         motionManager?.startActivityUpdates(to: motionQueue) { [weak self] activity in
             guard let self else { return }
@@ -149,6 +181,15 @@ extension LocationTracker: CLLocationManagerDelegate {
 
     public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard !locations.isEmpty else { return }
+
+        // While only the significant-change watch is running these fixes are
+        // hundreds of metres apart and are a prompt to check the pedometer,
+        // not route data. Feeding them to the matcher would draw a straight
+        // line across half a city.
+        if !isTracking {
+            delegate?.locationTrackerDidObserveSignificantChange(self)
+            return
+        }
         delegate?.locationTracker(self, didReceive: locations)
     }
 

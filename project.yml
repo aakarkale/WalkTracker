@@ -162,7 +162,9 @@ targets:
       - sdk: MapKit.framework            # map rendering
       - sdk: CryptoKit.framework         # SHA-256 verification of city packs
       - sdk: libsqlite3.tbd              # user database and city packs
-      - sdk: libcompression.tbd          # raw DEFLATE for gzipped city packs
+      # Compression is not listed: it is part of libsystem on iOS and Swift
+      # autolinks it from "import Compression". An explicit libcompression.tbd
+      # is a macOS SDK path and fails to link here.
 
     settings:
       base:

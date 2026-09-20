@@ -1,9 +1,16 @@
 import SwiftUI
 
-/// The record control: live figures while a walk runs, and one unmissable pill.
+/// The bottom of the map screen: how much of the city is done, and the one
+/// loud control that starts or stops a walk.
+///
+/// Laid out the way the reference app does it, because it works: a slim
+/// full-width coverage bar with the block counter on the left and the
+/// percentage on the right, and directly under it the pill. No card around the
+/// bar, so the map still reads as the screen.
 struct WalkControlBar: View {
 
     @ObservedObject var engine: TrackingEngine
+    let stats: CoverageCalculator.CityStats?
     /// Whether a walk can be started at all: a city pack is open and location
     /// access has been granted.
     let isReady: Bool
@@ -31,31 +38,61 @@ struct WalkControlBar: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 14) {
             if isRecording {
-                if isAutoPaused {
-                    pausedChip
-                }
-                liveStats
+                liveStatsCard
             }
 
             if let blockingPauseReason {
                 pauseNotice(blockingPauseReason)
             }
 
+            if let stats {
+                CoverageBar(stats: stats)
+            }
+
             controlButton
         }
-        .padding(22)
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(WalkPalette.card)
-                .shadow(color: WalkPalette.cardShadow, radius: 16, x: 0, y: 4)
-        )
         .animation(.smooth(duration: 0.3), value: isRecording)
         .animation(.smooth(duration: 0.3), value: isAutoPaused)
     }
 
-    // MARK: - Pieces
+    // MARK: - Live stats
+
+    private var liveStatsCard: some View {
+        VStack(spacing: 14) {
+            if isAutoPaused {
+                pausedChip
+            }
+
+            // A timeline rather than a timer object: SwiftUI drives the tick,
+            // so nothing keeps running when this view is off screen. The clock
+            // reads the engine's active duration, which excludes auto-paused
+            // stretches, so a lunch stop does not inflate the walk.
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                StatTileRow(tiles: [
+                    StatTile(
+                        title: String(localized: "New street"),
+                        value: WalkFormat.distance(metres: engine.newCoverageMetres),
+                        size: 28,
+                        tint: WalkPalette.accent
+                    ),
+                    StatTile(
+                        title: String(localized: "Distance"),
+                        value: WalkFormat.distance(metres: engine.distanceMetres),
+                        size: 28
+                    ),
+                    StatTile(
+                        title: String(localized: "Time"),
+                        value: WalkFormat.clock(engine.activeDuration),
+                        size: 28,
+                        tint: isAutoPaused ? WalkPalette.secondaryInk : WalkPalette.ink
+                    )
+                ])
+            }
+        }
+        .walkCard(padding: 20)
+    }
 
     private var pausedChip: some View {
         HStack(spacing: 8) {
@@ -72,34 +109,6 @@ struct WalkControlBar: View {
         .background(Capsule(style: .continuous).fill(WalkPalette.hairline))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "Walk paused automatically because you stopped moving. It resumes on its own."))
-    }
-
-    private var liveStats: some View {
-        // A timeline rather than a timer object: SwiftUI drives the tick, so
-        // nothing keeps running when this view is off screen. The clock reads
-        // the engine's active duration, which excludes auto-paused stretches,
-        // so a lunch stop does not inflate the walk.
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            StatTileRow(tiles: [
-                StatTile(
-                    title: String(localized: "New street"),
-                    value: WalkFormat.distance(metres: engine.newCoverageMetres),
-                    size: 30,
-                    tint: WalkPalette.accent
-                ),
-                StatTile(
-                    title: String(localized: "Distance"),
-                    value: WalkFormat.distance(metres: engine.distanceMetres),
-                    size: 30
-                ),
-                StatTile(
-                    title: String(localized: "Time"),
-                    value: WalkFormat.clock(engine.activeDuration),
-                    size: 30,
-                    tint: isAutoPaused ? WalkPalette.secondaryInk : WalkPalette.ink
-                )
-            ])
-        }
     }
 
     private func pauseNotice(_ reason: TrackingEngine.State.PauseReason) -> some View {
@@ -124,9 +133,14 @@ struct WalkControlBar: View {
         }
     }
 
+    // MARK: - Control
+
     private var controlButton: some View {
         Button(action: isRecording ? onStop : onStart) {
-            Text(isRecording ? String(localized: "Stop walk") : String(localized: "Start walk"))
+            HStack(spacing: 10) {
+                Image(systemName: isRecording ? "stop.fill" : "figure.walk")
+                Text(isRecording ? String(localized: "Stop walk") : String(localized: "Start walk"))
+            }
         }
         .buttonStyle(PillButtonStyle(tint: isRecording ? WalkPalette.recording : WalkPalette.accent))
         .disabled(!isRecording && !isReady)
@@ -139,6 +153,64 @@ struct WalkControlBar: View {
             isRecording
                 ? String(localized: "Saves the walk and stops using GPS")
                 : String(localized: "Records your location until you stop the walk")
+        )
+    }
+}
+
+/// Blocks done over blocks total on the left, the percentage on the right, and
+/// a thin accent fill underneath.
+///
+/// The counter and the percentage are both block-based, so they corroborate
+/// each other. A length-derived percentage next to a block count would
+/// disagree with it and read as a bug.
+struct CoverageBar: View {
+
+    let stats: CoverageCalculator.CityStats
+
+    private var percentageText: String {
+        WalkFormat.percentage(
+            stats.displayPercentage,
+            startedButBelowResolution: stats.completedBlocks > 0
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(WalkFormat.blockCounter(completed: stats.completedBlocks, total: stats.totalBlocks))
+                    .font(WalkType.label)
+                    .textCase(.uppercase)
+                    .kerning(0.8)
+                    .foregroundStyle(WalkPalette.secondaryInk)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Spacer(minLength: 0)
+
+                Text(percentageText)
+                    .font(WalkType.cardTitle)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(WalkPalette.ink)
+                    .lineLimit(1)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(WalkPalette.hairline)
+                    Capsule(style: .continuous)
+                        .fill(WalkPalette.accent)
+                        .frame(width: max(0, proxy.size.width * min(1, max(0, stats.blockFraction))))
+                }
+            }
+            .frame(height: 6)
+            .animation(.smooth(duration: 0.4), value: stats.blockFraction)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "City progress"))
+        .accessibilityValue(
+            "\(percentageText), \(WalkFormat.blocks(completed: stats.completedBlocks, total: stats.totalBlocks))"
         )
     }
 }

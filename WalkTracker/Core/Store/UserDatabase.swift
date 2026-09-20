@@ -102,6 +102,14 @@ public final class UserDatabase {
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+        """,
+
+        // Records where a walk came from. Imported history is real coverage
+        // but it is not a walk the user took with this app, and conflating
+        // the two would misreport streaks and totals.
+        """
+        ALTER TABLE session ADD COLUMN source TEXT NOT NULL DEFAULT 'live';
+        CREATE INDEX session_source ON session(source);
         """
     ]
 

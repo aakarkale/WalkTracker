@@ -41,10 +41,24 @@ public struct TrackPoint: Equatable, Sendable {
     }
 }
 
+/// Where a session's data came from.
+public enum WalkSource: String, Codable, Sendable, CaseIterable {
+    /// Recorded by this app, live.
+    case live
+    /// Imported from a GPX file, which is what Strava and most other tools
+    /// export.
+    case gpx
+    /// Imported from a workout route in Apple Health.
+    case health
+
+    public var isImported: Bool { self != .live }
+}
+
 /// A continuous stretch of tracking, from start to stop.
 public struct WalkSession: Identifiable, Equatable, Sendable {
     public let id: Int64
     public let cityID: String
+    public let source: WalkSource
     public let startedAt: Date
     public var endedAt: Date?
     /// Distance walked in metres, computed from the raw trace.
@@ -66,10 +80,12 @@ public struct WalkSession: Identifiable, Equatable, Sendable {
         endedAt: Date? = nil,
         distanceMetres: Double = 0,
         newCoverageMetres: Double = 0,
-        pointCount: Int = 0
+        pointCount: Int = 0,
+        source: WalkSource = .live
     ) {
         self.id = id
         self.cityID = cityID
+        self.source = source
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.distanceMetres = distanceMetres

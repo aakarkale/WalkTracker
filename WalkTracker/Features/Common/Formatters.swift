@@ -69,17 +69,21 @@ enum WalkFormat {
 
     /// Formats a 0...100 completion percentage.
     ///
+    /// Two decimals, matching `CityStats.displayPercentage`: at city scale one
+    /// walk moves the figure by a hundredth of a point, and a number that never
+    /// visibly changes is worse than no number at all.
+    ///
     /// - Parameter startedButBelowResolution: true when the user has walked
-    ///   something but the floored percentage rounds to zero. Showing a flat
-    ///   "0%" after a real walk reads as a bug, and rounding it up would be a
-    ///   lie, so it becomes "less than 0.1%".
+    ///   something but the floored percentage still rounds to zero. A flat "0%"
+    ///   after a real walk reads as a bug, and rounding it up would be a lie,
+    ///   so it becomes "less than 0.01%".
     static func percentage(_ percent: Double, startedButBelowResolution: Bool = false) -> String {
         if startedButBelowResolution && percent <= 0 {
-            let floorValue = (0.001).formatted(.percent.precision(.fractionLength(1)))
+            let floorValue = (0.0001).formatted(.percent.precision(.fractionLength(2)))
             return String(localized: "less than \(floorValue)")
         }
         let fraction = min(1, max(0, percent / 100))
-        return fraction.formatted(.percent.precision(.fractionLength(1)))
+        return fraction.formatted(.percent.precision(.fractionLength(2)))
     }
 
     /// A whole-number percentage for compact places such as list rows.
@@ -89,10 +93,27 @@ enum WalkFormat {
 
     // MARK: - Counts and sizes
 
+    /// Long form, for accessibility and for prose.
     static func blocks(completed: Int, total: Int) -> String {
         let done = completed.formatted()
         let all = total.formatted()
         return String(localized: "\(done) of \(all) blocks")
+    }
+
+    /// Compact counter for the coverage bar: "1,301 / 36,402 blocks".
+    ///
+    /// Always shown next to the percentage, and the percentage it sits beside
+    /// is block-based, so the two corroborate each other instead of
+    /// disagreeing.
+    static func blockCounter(completed: Int, total: Int) -> String {
+        let done = completed.formatted()
+        let all = total.formatted()
+        return String(localized: "\(done) / \(all) blocks")
+    }
+
+    static func blockCount(_ count: Int) -> String {
+        let value = count.formatted()
+        return String(localized: "\(value) blocks")
     }
 
     static func downloadSize(bytes: Int64) -> String {

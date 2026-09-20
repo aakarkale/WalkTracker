@@ -4,12 +4,17 @@ import UIKit
 /// The app's colours.
 ///
 /// VISUAL DIRECTION, recorded here so it does not get undone by accident:
-/// light and modern, in the family of Strava and Nike Run Club. Near-white
-/// backgrounds, white cards with a very soft shadow rather than grey fills,
-/// generous whitespace instead of dividers and borders, and exactly ONE vivid
-/// accent (a warm high-energy orange) used sparingly: walked streets, the
+/// light and modern, in the family of Strava and Nike Run Club for typography,
+/// spacing and surfaces. Near-white backgrounds, white cards with a very soft
+/// shadow rather than grey fills, generous whitespace instead of dividers and
+/// borders, and exactly ONE vivid accent used sparingly: walked streets, the
 /// progress ring, and the primary action. Everything else is near-black text,
 /// mid grey secondary text, and white. Resist adding a second accent colour.
+///
+/// The accent is GREEN, in the tone of Nike Run Club's volt green. It is not a
+/// style choice that can be swapped for a warm colour: green reads as "done"
+/// instantly over a light map, which is exactly what a walked street is, and
+/// the reference app for this product draws its walked blocks the same way.
 ///
 /// Dark mode is a real dark theme rather than inverted greys: near-black page,
 /// slightly lifted cards, and the same accent warmed a little so it keeps its
@@ -22,11 +27,12 @@ enum WalkPalette {
 
     // MARK: - Accent
 
-    /// The single accent. Warm, high energy, readable on a light map.
+    /// The single accent: a vivid medium green, lifted slightly in dark mode
+    /// so it keeps its contrast against a near-black page.
     static let accentUIColor = UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 1.00, green: 0.42, blue: 0.22, alpha: 1.0)
-            : UIColor(red: 0.96, green: 0.33, blue: 0.10, alpha: 1.0)
+            ? UIColor(red: 0.188, green: 0.820, blue: 0.345, alpha: 1.0)
+            : UIColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0)
     }
 
     static let accent = Color(uiColor: accentUIColor)

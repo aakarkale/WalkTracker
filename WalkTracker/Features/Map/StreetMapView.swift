@@ -84,11 +84,11 @@ struct StreetMapView: UIViewRepresentable {
         map.showsCompass = true
         map.showsScale = true
         map.isPitchEnabled = false
-        // Points of interest are noise for this app: the user is looking at
-        // streets, not at restaurants. Street names stay, because "which street
-        // have I not walked" is unanswerable without them.
-        map.pointOfInterestFilter = .excludingAll
-        map.mapType = .mutedStandard
+        // The standard light base map, left exactly as Apple draws it. The
+        // coverage is what this screen is about, and it is drawn over the top:
+        // restyling the map underneath would only make the accent harder to
+        // read.
+        map.mapType = .standard
         return map
     }
 
@@ -179,12 +179,14 @@ struct StreetMapView: UIViewRepresentable {
 
             // Identity rather than a subclass: there are exactly two overlays
             // and the coordinator already holds both of them.
+            // Walked streets are both the accent colour and the heavier
+            // stroke, so they read first at every zoom level.
             if multi === walkedOverlay {
                 renderer.strokeColor = WalkPalette.walkedUIColor
-                renderer.lineWidth = 5
+                renderer.lineWidth = 5.5
             } else {
                 renderer.strokeColor = WalkPalette.unwalkedUIColor
-                renderer.lineWidth = 3
+                renderer.lineWidth = 2.5
             }
             return renderer
         }

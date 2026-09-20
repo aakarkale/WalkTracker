@@ -11,12 +11,21 @@ public final class SessionStore {
 
     // MARK: - Sessions
 
-    public func startSession(cityID: String, at date: Date = Date()) throws -> WalkSession {
+    public func startSession(
+        cityID: String,
+        at date: Date = Date(),
+        source: WalkSource = .live
+    ) throws -> WalkSession {
         try database.run(
-            "INSERT INTO session (city_id, started_at) VALUES (?, ?)",
-            [.text(cityID), .real(date.timeIntervalSince1970)]
+            "INSERT INTO session (city_id, started_at, source) VALUES (?, ?, ?)",
+            [.text(cityID), .real(date.timeIntervalSince1970), .text(source.rawValue)]
         )
-        return WalkSession(id: database.lastInsertRowID(), cityID: cityID, startedAt: date)
+        return WalkSession(
+            id: database.lastInsertRowID(),
+            cityID: cityID,
+            startedAt: date,
+            source: source
+        )
     }
 
     public func endSession(id: Int64, at date: Date = Date()) throws {
@@ -65,7 +74,7 @@ public final class SessionStore {
     private func sessions(where clause: String, _ parameters: [SQLiteDatabase.Value]) throws -> [WalkSession] {
         try database.query(
             """
-            SELECT id, city_id, started_at, ended_at, distance_m, new_coverage_m, point_count
+            SELECT id, city_id, started_at, ended_at, distance_m, new_coverage_m, point_count, source
             FROM session WHERE \(clause)
             """,
             parameters
@@ -77,7 +86,8 @@ public final class SessionStore {
                 endedAt: row.isNull(3) ? nil : Date(timeIntervalSince1970: row.double(3)),
                 distanceMetres: row.double(4),
                 newCoverageMetres: row.double(5),
-                pointCount: Int(row.int(6))
+                pointCount: Int(row.int(6)),
+                source: WalkSource(rawValue: row.string(7) ?? "live") ?? .live
             )
         }
     }
