@@ -3,8 +3,21 @@
 An iOS app for tracking which streets of a city you have actually walked.
 
 Coverage is recorded block by block against the real street network, so the
-percentage means something: metres of street walked over metres of walkable
-street. Walk half of Bleecker Street and you get credit for half of it.
+percentage means something. Walk half of Bleecker Street and half of it counts.
+
+- **Record a walk** by hand, or let the app start one itself when it notices
+  you walking. Automatic recording is off until you turn it on.
+- **Watch the map fill in** as blocks turn from grey to green, with the count
+  and the percentage always on screen.
+- **See what a walk earned** the moment it ends: new street unlocked, not just
+  distance covered.
+- **Import what you have already walked** from GPX, so ten years in a city
+  does not start at zero.
+- **Narrow the target** to the neighbourhoods you care about, because four
+  percent of Tokyo is discouraging and forty percent of one neighbourhood is
+  a goal.
+- **Keep a backup**, because coverage takes a year to build and lives only on
+  your phone.
 
 ---
 
