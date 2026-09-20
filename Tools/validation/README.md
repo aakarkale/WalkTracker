@@ -50,6 +50,7 @@ cd ../validation && python3 e2e_pack.py   # expects the pack beside it
 | `sim.py` | Synthetic grid city and walk simulator | test fixture |
 | `final_eval.py` | Precision and recall of the chosen configuration | end to end |
 | `sweep.py` | The variant comparison the configuration was chosen from | tuning record |
+| `district_scope_ref.py` | District-scoped totals against a real pack | `Store/CityPackStore.swift` totals |
 | `e2e_pack.py` | A real built pack read by the decoder and walked by the matcher | pipeline to app |
 | `gzip_ref.py` | Gzip framing in both directions, which backups depend on | `CityPack/GzipEncoder.swift` and `GzipDecoder.swift` |
 | `gpx_ref.py` | GPX parsing, gap splitting and malformed-point handling | `Coverage/GPXImporter.swift` |

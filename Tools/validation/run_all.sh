@@ -91,8 +91,12 @@ if python3 Tools/citypack/make_fixture.py --rows 20 --cols 20 --spacing 80 \
    && python3 Tools/citypack/build_pack.py "$tmp/grid.osm" --city-id testville \
         --city-name Testville --districts "$tmp/grid-districts.geojson" \
         --out-dir "$tmp" --quiet >/dev/null 2>&1; then
-    cp Tools/validation/{matcher_ref.py,smoother.py,geom_codec.py,e2e_pack.py} "$tmp/"
-    if (cd "$tmp" && python3 e2e_pack.py); then echo "OK"; else echo "FAILED"; fail=1; fi
+    cp Tools/validation/{matcher_ref.py,smoother.py,geom_codec.py,e2e_pack.py,district_scope_ref.py} "$tmp/"
+    if (cd "$tmp" && python3 e2e_pack.py && python3 district_scope_ref.py); then
+        echo "OK"
+    else
+        echo "FAILED"; fail=1
+    fi
 else
     echo "FAILED to build the test pack"; fail=1
 fi
