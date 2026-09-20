@@ -158,11 +158,27 @@ public final class CityPackStore: SegmentIndex {
         public let blockCount: Int
     }
 
-    public func totals(includeOptional: Bool) -> Totals {
-        let sql = includeOptional
-            ? "SELECT COALESCE(SUM(length_m), 0), COUNT(*) FROM segment"
-            : "SELECT COALESCE(SUM(length_m), 0), COUNT(*) FROM segment WHERE class NOT IN (\(Self.optionalClassList))"
-        let rows = (try? database.query(sql) { ($0.double(0), Int($0.int(1))) }) ?? []
+    /// City totals, optionally narrowed to chosen districts.
+    ///
+    /// - Parameter districtIDs: nil counts the whole city. A non-empty set
+    ///   narrows the denominator, which is what makes a large city
+    ///   approachable: "4% of Tokyo" is discouraging, "40% of Shimokitazawa"
+    ///   is a goal. Narrowing changes the denominator only; coverage recorded
+    ///   elsewhere is kept and reappears when the scope widens again.
+    public func totals(includeOptional: Bool, districtIDs: Set<Int64>? = nil) -> Totals {
+        var clauses: [String] = []
+        if !includeOptional { clauses.append("class NOT IN (\(Self.optionalClassList))") }
+
+        var parameters: [SQLiteDatabase.Value] = []
+        if let districtIDs {
+            guard !districtIDs.isEmpty else { return Totals(lengthMetres: 0, blockCount: 0) }
+            let placeholders = Array(repeating: "?", count: districtIDs.count).joined(separator: ",")
+            clauses.append("district_id IN (\(placeholders))")
+            parameters = districtIDs.sorted().map { .integer($0) }
+        }
+
+        let (a, b) = ("SELECT COALESCE(SUM(length_m), 0), COUNT(*) FROM segment", clauses.isEmpty ? "" : " WHERE " + clauses.joined(separator: " AND "))
+        let rows = (try? database.query(a + b, parameters) { ($0.double(0), Int($0.int(1))) }) ?? []
         guard let first = rows.first else { return Totals(lengthMetres: 0, blockCount: 0) }
         return Totals(lengthMetres: first.0, blockCount: first.1)
     }

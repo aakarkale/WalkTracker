@@ -95,8 +95,15 @@ public struct CoverageCalculator {
     /// - Parameter includeOptional: whether alleys, stairs and service roads
     ///   count. Off by default: including them makes a city look unfinishable
     ///   and penalises people for not walking every service road.
-    public func cityStats(cityID: String, includeOptional: Bool = false) throws -> CityStats {
-        let totals = packStore.totals(includeOptional: includeOptional)
+    /// - Parameter districtIDs: nil counts the whole city. A set narrows both
+    ///   the denominator and the numerator to those neighbourhoods, so the
+    ///   figure stays internally consistent.
+    public func cityStats(
+        cityID: String,
+        includeOptional: Bool = false,
+        districtIDs: Set<Int64>? = nil
+    ) throws -> CityStats {
+        let totals = packStore.totals(includeOptional: includeOptional, districtIDs: districtIDs)
         let fractions = try coverageStore.fractions(forCity: cityID)
 
         guard !fractions.isEmpty else {
@@ -119,6 +126,9 @@ public struct CoverageCalculator {
             // honest until the rebuild runs.
             guard let summary = summaries[segmentID] else { continue }
             guard includeOptional || !summary.wayClass.isOptionalByDefault else { continue }
+            if let districtIDs {
+                guard let district = summary.districtID, districtIDs.contains(district) else { continue }
+            }
 
             walked += fraction * summary.lengthMetres
             if fraction >= SegmentCoverage.completionThreshold { completed += 1 }
