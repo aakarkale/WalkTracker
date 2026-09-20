@@ -55,13 +55,19 @@ above changes and the disclosure has to change with it.
 
 The facts a privacy policy needs, in plain terms:
 
-- The app records your location continuously while a walk is running, including
-  when the screen is off, and stores it on your device.
+- The app records your location while a walk is running, including when the
+  screen is off, and stores it on your device.
+- If automatic recording is switched on, it can start a walk by itself when it
+  detects you walking. It is off until you turn it on.
 - It keeps every recorded position permanently, so coverage can be rebuilt when
   street data or the matching algorithm changes.
-- None of it is sent anywhere. There is no account and no sync.
+- The app never sends any of it anywhere. There is no account and no sync. If
+  you export a backup or a GPX file, you choose where that file goes, and
+  iCloud Drive is a normal choice.
 - Deleting your data in Settings erases the traces and reclaims the disk pages
-  holding them.
+  holding them. It cannot reach a backup you have already exported.
+- Deleting the app deletes everything it holds. A backup is how you avoid
+  losing a year of walking.
 - The app asks for motion data to tell walking from riding, so a bus ride down
   a street is not counted as having walked it.
 - City street data is downloaded from a server, which learns which city you

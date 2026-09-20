@@ -142,9 +142,16 @@ those apps would undermine the product.
 Location history is about as sensitive as personal data gets. The decisions
 that follow from that:
 
-- **Nothing leaves the device.** No account, no analytics, no sync, no crash
-  reporting. The only network request the app makes is fetching a city pack,
-  which reveals only which city you picked.
+- **Nothing leaves the device unless you send it.** No account, no analytics,
+  no sync, no crash reporting. The only network request the app makes on its
+  own is fetching a city pack, which reveals only which city you picked.
+  Backup and GPX export write a file and hand it to the share sheet; where it
+  goes after that is the user's choice, and iCloud Drive is a normal one. The
+  app never uploads anything itself.
+- **Backups exist because local-only is otherwise fragile.** Coverage takes a
+  year to build and cannot be recreated, so deleting the app or losing the
+  phone would destroy it. Keeping data on device while offering no way to keep
+  a copy is not a privacy position.
 - **Zero third-party dependencies.** Every line that touches location data is
   in this repository. SQLite is wrapped directly, gzip is decoded directly.
 - **Data protection** is set to complete-until-first-user-authentication on the
@@ -154,15 +161,22 @@ that follow from that:
   with recording in your pocket.
 - **Deletion is real.** Delete runs `VACUUM`, because without it the freed
   pages keep your old coordinates on disk until something happens to overwrite
-  them.
+  them. A backup the user has already exported is outside the app and is not
+  reached by this, which the Settings copy says.
 - **Packs are not trusted.** Each is verified against a SHA-256 digest that
   ships inside the signed binary, before decompression and before SQLite is
   pointed at it. A compromised or intercepted CDN can serve a wrong file but
   cannot get it opened. Decompression is capped so a small archive cannot
   expand without bound, and packs are opened read-only with every field
   bounds-checked.
-- **The background location indicator stays on.** It could be hidden. An app
-  that records where you walk should be visibly recording.
+- **The background location indicator defaults to on.** An app that records
+  where you walk should be visibly recording. It is a preference rather than a
+  rule, because the person whose phone it is may have their own reasons for
+  not wanting a permanent badge, and overriding that is paternalism rather
+  than privacy.
+- **Vehicle travel is recorded but never credited**, and the app says so while
+  it happens. Otherwise someone who rides a bus along a street they also walk
+  concludes it is broken.
 
 ## Measured, for once
 
