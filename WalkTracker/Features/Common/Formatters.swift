@@ -21,27 +21,33 @@ enum WalkFormat {
 
     /// A walked distance, in the units the locale expects.
     static func distance(metres: Double) -> String {
+        let parts = distanceParts(metres: metres)
+        return String(localized: "\(parts.value) \(parts.unit)")
+    }
+
+    /// The number and its unit separately, for layouts that set the two at
+    /// different weights and sizes. That contrast is most of what makes a
+    /// figure read as a headline rather than as a sentence.
+    static func distanceParts(metres: Double) -> (value: String, unit: String) {
         let safe = max(0, metres)
 
         if usesMetricDistance {
             if safe < 1_000 {
-                let value = Int(safe.rounded()).formatted()
-                return String(localized: "\(value) m")
+                return (Int(safe.rounded()).formatted(), String(localized: "m"))
             }
             let kilometres = safe / 1_000
             let value = kilometres.formatted(.number.precision(.fractionLength(kilometres < 10 ? 2 : 1)))
-            return String(localized: "\(value) km")
+            return (value, String(localized: "km"))
         }
 
         let feet = safe * 3.280_839_895
         // Below about a tenth of a mile, miles stop being a useful unit.
         if feet < 528 {
-            let value = Int(feet.rounded()).formatted()
-            return String(localized: "\(value) ft")
+            return (Int(feet.rounded()).formatted(), String(localized: "ft"))
         }
         let miles = safe / 1_609.344
         let value = miles.formatted(.number.precision(.fractionLength(miles < 10 ? 2 : 1)))
-        return String(localized: "\(value) mi")
+        return (value, String(localized: "mi"))
     }
 
     /// The distance unit the locale wants, for a chart axis label where the

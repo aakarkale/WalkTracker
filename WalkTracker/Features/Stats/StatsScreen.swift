@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import Charts
 
@@ -15,6 +16,10 @@ struct StatsScreen: View {
     @State private var period: ChartPeriod = .week
     @State private var selectedWalk: WalkSession?
     @State private var isLoading = false
+    @State private var shareImage: Image?
+    @State private var isBuildingShareImage = false
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Everything that can change the numbers. Used as the reload key so the
     /// screen refreshes after a walk, an import, a settings change or a city
@@ -40,7 +45,7 @@ struct StatsScreen: View {
             await load()
         }
         .sheet(item: $selectedWalk) { walk in
-            WalkDetailSheet(session: walk) {
+            WalkDetailSheet(sessions: sessions, initialWalk: walk) {
                 selectedWalk = nil
             }
         }
@@ -51,11 +56,11 @@ struct StatsScreen: View {
     private var content: some View {
         ScrollView {
             VStack(spacing: 18) {
+                gradientCards
                 headlineCard
-                blocksCard
 
                 if !chartBuckets.isEmpty {
-                    chartCard
+                    sparklineCards
                 }
 
                 if !districts.isEmpty {
@@ -67,6 +72,92 @@ struct StatsScreen: View {
             .padding(20)
         }
         .refreshable { await load() }
+    }
+
+    // MARK: - Gradient cards
+
+    @ViewBuilder
+    private var gradientCards: some View {
+        if let stats = environment.cityStats {
+            // Typed explicitly so the optional link has a contextual type to be
+            // inferred against rather than a bare ternary of nil and a closure.
+            let latestTitle: String? = sessions.isEmpty ? nil : String(localized: "Latest walk")
+            let openLatest: (() -> Void)? = sessions.isEmpty ? nil : { selectedWalk = sessions.first }
+
+            let walks = GradientStatCard(
+                icon: "figure.walk",
+                label: String(localized: "Total"),
+                value: sessions.count.formatted(),
+                title: String(localized: "Walks recorded"),
+                detail: cityCaption,
+                linkTitle: latestTitle,
+                action: openLatest
+            )
+            let blocks = GradientStatCard(
+                icon: "square.grid.2x2.fill",
+                label: String(localized: "Done"),
+                value: stats.completedBlocks.formatted(),
+                title: String(localized: "Blocks finished"),
+                detail: String(localized: "of \(stats.totalBlocks.formatted()) walkable blocks"),
+                intensity: 0.82
+            )
+
+            if dynamicTypeSize >= .accessibility1 {
+                VStack(spacing: 14) {
+                    walks
+                    blocks
+                }
+            } else {
+                HStack(alignment: .top, spacing: 14) {
+                    walks
+                    blocks
+                }
+            }
+        }
+    }
+
+    // MARK: - Sparkline cards
+
+    private var sparklineCards: some View {
+        VStack(spacing: 18) {
+            SparklineStatCard(
+                icon: "sparkles",
+                title: String(localized: "New street"),
+                value: latestNewStreet.value,
+                unit: latestNewStreet.unit,
+                periodTitle: period.title,
+                latestLabel: chartBuckets.last?.label ?? "",
+                values: chartBuckets.map { WalkFormat.distanceValue(metres: $0.newCoverageMetres) },
+                onCyclePeriod: cyclePeriod
+            )
+
+            SparklineStatCard(
+                icon: "figure.walk.motion",
+                title: String(localized: "Distance"),
+                value: latestDistance.value,
+                unit: latestDistance.unit,
+                periodTitle: period.title,
+                latestLabel: chartBuckets.last?.label ?? "",
+                values: chartBuckets.map { WalkFormat.distanceValue(metres: $0.distanceMetres) },
+                onCyclePeriod: cyclePeriod
+            )
+        }
+    }
+
+    private var latestNewStreet: (value: String, unit: String) {
+        WalkFormat.distanceParts(metres: chartBuckets.last?.newCoverageMetres ?? 0)
+    }
+
+    private var latestDistance: (value: String, unit: String) {
+        WalkFormat.distanceParts(metres: chartBuckets.last?.distanceMetres ?? 0)
+    }
+
+    private func cyclePeriod() {
+        switch period {
+        case .day: period = .week
+        case .week: period = .month
+        case .month: period = .day
+        }
     }
 
     private var emptyState: some View {
@@ -96,7 +187,7 @@ struct StatsScreen: View {
     @ViewBuilder
     private var headlineCard: some View {
         if let stats = environment.cityStats {
-            VStack(spacing: 16) {
+            VStack(spacing: 18) {
                 ProgressRing(
                     fraction: stats.blockFraction,
                     title: WalkFormat.percentage(
@@ -107,11 +198,13 @@ struct StatsScreen: View {
                     accessibilityDescription: headlineAccessibilityText(stats)
                 )
 
-                Text(WalkFormat.blockCounter(completed: stats.completedBlocks, total: stats.totalBlocks))
-                    .font(WalkType.label)
-                    .textCase(.uppercase)
-                    .kerning(0.8)
+                Text(String(localized: "\(WalkFormat.distance(metres: stats.walkedMetres)) of street walked, \(stats.remainingBlocks.formatted()) blocks to go"))
+                    .font(WalkType.caption)
                     .foregroundStyle(WalkPalette.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                shareControl
             }
             .frame(maxWidth: .infinity)
             .walkCard(padding: 26)
@@ -124,25 +217,53 @@ struct StatsScreen: View {
     }
 
     @ViewBuilder
-    private var blocksCard: some View {
-        if let stats = environment.cityStats {
-            StatTileRow(tiles: [
-                StatTile(
-                    title: String(localized: "Blocks done"),
-                    value: stats.completedBlocks.formatted(),
-                    tint: WalkPalette.accent
-                ),
-                StatTile(
-                    title: String(localized: "Blocks to go"),
-                    value: stats.remainingBlocks.formatted()
-                ),
-                StatTile(
-                    title: String(localized: "Street walked"),
-                    value: WalkFormat.distance(metres: stats.walkedMetres)
+    private var shareControl: some View {
+        if let shareImage {
+            ShareLink(
+                item: shareImage,
+                preview: SharePreview(shareTitle, image: shareImage)
+            ) {
+                Text(String(localized: "Share"))
+            }
+            .buttonStyle(SmallPillButtonStyle(filled: false))
+            .accessibilityLabel(String(localized: "Share an image of your progress"))
+        } else {
+            Button {
+                Task { await buildShareImage() }
+            } label: {
+                Text(
+                    isBuildingShareImage
+                        ? String(localized: "Preparing")
+                        : String(localized: "Share your map")
                 )
-            ])
-            .walkCard()
+            }
+            .buttonStyle(SmallPillButtonStyle(filled: false))
+            .disabled(isBuildingShareImage)
+            .accessibilityHint(String(localized: "Makes a picture on this device. Nothing is uploaded."))
         }
+    }
+
+    private var shareTitle: String {
+        let percent = environment.cityStats.map {
+            WalkFormat.percentage($0.displayPercentage)
+        } ?? ""
+        let name = environment.selectedCity?.name ?? ""
+        return String(localized: "\(percent) of \(name)")
+    }
+
+    private func buildShareImage() async {
+        isBuildingShareImage = true
+        defer { isBuildingShareImage = false }
+
+        let runs = await environment.walkedStreetGeometry()
+        let card = ShareCardView(
+            cityName: environment.selectedCity?.name ?? "",
+            percentageText: environment.cityStats.map {
+                WalkFormat.percentage($0.displayPercentage)
+            } ?? "",
+            runs: runs
+        )
+        shareImage = ShareCardRenderer.image(for: card)
     }
 
     private var cityCaption: String {
@@ -160,49 +281,10 @@ struct StatsScreen: View {
         return String(localized: "\(percent) of \(name) walked, \(blocks)")
     }
 
-    // MARK: - Chart
-
-    private var chartCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                CapsLabel(text: String(localized: "New street (\(WalkFormat.distanceUnitLabel))"))
-                Spacer(minLength: 8)
-            }
-
-            Picker(String(localized: "Period"), selection: $period) {
-                ForEach(ChartPeriod.allCases) { option in
-                    Text(option.title).tag(option)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Chart {
-                ForEach(chartBuckets) { bucket in
-                    BarMark(
-                        x: .value(String(localized: "Period"), bucket.label),
-                        y: .value(String(localized: "New street"), WalkFormat.distanceValue(metres: bucket.newCoverageMetres))
-                    )
-                    .foregroundStyle(WalkPalette.accent)
-                    .cornerRadius(5)
-                }
-            }
-            .chartLegend(.hidden)
-            .frame(height: 170)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(String(localized: "New street unlocked per \(period.title)"))
-            .accessibilityValue(chartAccessibilitySummary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .walkCard()
-    }
+    // MARK: - Chart data
 
     private var chartBuckets: [WalkBucket] {
         WalkBucket.buckets(from: sessions, period: period)
-    }
-
-    private var chartAccessibilitySummary: String {
-        let total = chartBuckets.reduce(0) { $0 + $1.newCoverageMetres }
-        return String(localized: "\(WalkFormat.distance(metres: total)) in total across \(chartBuckets.count.formatted()) periods")
     }
 
     // MARK: - Districts
@@ -283,7 +365,9 @@ struct StatsScreen: View {
                 cityID: cityID,
                 includeOptional: includeOptional
             )) ?? []
-            let sessions = (try? services.sessionStore.recentSessions(cityID: cityID, limit: 120)) ?? []
+            // Enough to count every walk someone is realistically going to
+            // record, and cheap: these rows carry no geometry.
+            let sessions = (try? services.sessionStore.recentSessions(cityID: cityID, limit: 5_000)) ?? []
 
             // Only the rows that are actually drawn get a thumbnail.
             var routes: [Int64: [CGPoint]] = [:]

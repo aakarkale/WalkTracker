@@ -172,6 +172,12 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var packContext: PackContext?
     @Published private(set) var installStates: [String: PackInstallState] = [:]
     @Published private(set) var cityStats: CoverageCalculator.CityStats?
+    /// Neighbourhoods in the open pack. Empty when the pack carries none, which
+    /// is the case for every pack built so far.
+    @Published private(set) var availableDistricts: [District] = []
+    /// Which neighbourhoods count toward the percentage. Empty means all of
+    /// them, which is the default.
+    @Published private(set) var scopedDistrictIDs: Set<Int64> = []
     @Published private(set) var isPreparingCity = false
     /// Non-nil only while coverage is being rebuilt after a pack update.
     @Published private(set) var rebuildFraction: Double?
@@ -246,6 +252,9 @@ final class AppEnvironment: ObservableObject {
         static let hapticsEnabled = "hapticsEnabled"
         static let passiveTrackingEnabled = "passiveTrackingEnabled"
         static let showsRecordingIndicator = "showsRecordingIndicator"
+
+        /// Scoped per city: narrowing New York has nothing to do with Paris.
+        static func districtScope(cityID: String) -> String { "districtScope.\(cityID)" }
     }
 
     var catalog: CityCatalog { services.catalog }
@@ -438,6 +447,8 @@ final class AppEnvironment: ObservableObject {
         defaults.set(city.id, forKey: Keys.selectedCityID)
         packContext = nil
         cityStats = nil
+        availableDistricts = []
+        scopedDistrictIDs = []
 
         // Cities without a pack descriptor have no street data to open. They
         // are listed so people can see what is coming, and nothing more.
@@ -467,8 +478,43 @@ final class AppEnvironment: ObservableObject {
         packContext = opened
         installStates[city.id] = .installed
         engine.setCity(id: city.id, packStore: opened.store)
+
+        await loadDistricts(for: opened)
         await refreshCityStats()
         coverageRevision += 1
+    }
+
+    private func loadDistricts(for context: PackContext) async {
+        let districts = await Task.detached(priority: .utility) { () -> [District] in
+            context.store.districts()
+        }.value
+
+        availableDistricts = districts
+
+        let saved = defaults.array(forKey: Keys.districtScope(cityID: context.city.id)) as? [Int] ?? []
+        let valid = Set(districts.map(\.id))
+        // Ids that are no longer in the pack are dropped rather than silently
+        // narrowing the count to nothing.
+        scopedDistrictIDs = Set(saved.map { Int64($0) }).intersection(valid)
+    }
+
+    /// Narrows, or widens, which neighbourhoods count.
+    ///
+    /// Nothing is deleted by narrowing: coverage walked outside the chosen
+    /// neighbourhoods stays exactly where it is and comes back the moment the
+    /// scope is widened again. This is a view on the same data, not a filter
+    /// applied to it.
+    func setDistrictScope(_ ids: Set<Int64>) async {
+        guard let cityID = selectedCity?.id else { return }
+        scopedDistrictIDs = ids
+        defaults.set(ids.map { Int($0) }.sorted(), forKey: Keys.districtScope(cityID: cityID))
+        coverageRevision += 1
+        await refreshCityStats()
+    }
+
+    /// The scope in the form the calculator wants: nil for the whole city.
+    private var districtScope: Set<Int64>? {
+        scopedDistrictIDs.isEmpty ? nil : scopedDistrictIDs
     }
 
     // MARK: Packs
@@ -745,13 +791,18 @@ final class AppEnvironment: ObservableObject {
         let services = self.services
         let includeOptional = includeOptionalWays
         let cityName = context.city.name
+        let scope = districtScope
 
         return await Task.detached(priority: .userInitiated) { () -> MilestoneDetector.Snapshot? in
             let calculator = CoverageCalculator(
                 packStore: context.store,
                 coverageStore: services.coverageStore
             )
-            guard let stats = try? calculator.cityStats(cityID: cityID, includeOptional: includeOptional) else {
+            guard let stats = try? calculator.cityStats(
+                cityID: cityID,
+                includeOptional: includeOptional,
+                districtIDs: scope
+            ) else {
                 return nil
             }
             let districts = (try? calculator.districtStats(cityID: cityID, includeOptional: includeOptional)) ?? []
@@ -805,9 +856,14 @@ final class AppEnvironment: ObservableObject {
 
         let services = self.services
         let includeOptional = includeOptionalWays
+        let scope = districtScope
         let stats = await Task.detached(priority: .userInitiated) { () -> CoverageCalculator.CityStats? in
             let calculator = CoverageCalculator(packStore: context.store, coverageStore: services.coverageStore)
-            return try? calculator.cityStats(cityID: cityID, includeOptional: includeOptional)
+            return try? calculator.cityStats(
+                cityID: cityID,
+                includeOptional: includeOptional,
+                districtIDs: scope
+            )
         }.value
 
         cityStats = stats

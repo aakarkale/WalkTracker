@@ -30,13 +30,14 @@ enum WalkType {
 struct CapsLabel: View {
 
     let text: String
+    var color: Color = WalkPalette.secondaryInk
 
     var body: some View {
         Text(text)
             .font(WalkType.label)
             .textCase(.uppercase)
             .kerning(0.8)
-            .foregroundStyle(WalkPalette.secondaryInk)
+            .foregroundStyle(color)
             .lineLimit(2)
             .multilineTextAlignment(.center)
     }

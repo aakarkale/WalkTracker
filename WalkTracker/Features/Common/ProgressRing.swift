@@ -10,6 +10,10 @@ struct ProgressRing: View {
     var title: String?
     var caption: String?
     var tint: Color = WalkPalette.accent
+    var titleColor: Color = WalkPalette.ink
+    var captionColor: Color = WalkPalette.secondaryInk
+    /// Overall size before Dynamic Type scaling.
+    var baseDiameter: CGFloat = 168
     /// Accessibility replacement for the ring as a whole. When nil the ring is
     /// hidden from assistive technology, on the assumption that the caller has
     /// already described the same number nearby.
@@ -19,8 +23,8 @@ struct ProgressRing: View {
     /// of the phone.
     @ScaledMetric(relativeTo: .title) private var scale: CGFloat = 1
 
-    private var diameter: CGFloat { 168 * min(scale, 1.3) }
-    private var lineWidth: CGFloat { 14 * min(scale, 1.15) }
+    private var diameter: CGFloat { baseDiameter * min(scale, 1.3) }
+    private var lineWidth: CGFloat { max(8, baseDiameter * 0.083) * min(scale, 1.15) }
     private var clamped: Double { min(1, max(0, fraction)) }
 
     var body: some View {
@@ -36,10 +40,10 @@ struct ProgressRing: View {
 
             VStack(spacing: 4) {
                 if let title {
-                    HeroNumber(value: title, size: 42)
+                    HeroNumber(value: title, size: baseDiameter * 0.25, color: titleColor)
                 }
                 if let caption {
-                    CapsLabel(text: caption)
+                    CapsLabel(text: caption, color: captionColor)
                 }
             }
             .padding(lineWidth * 2)

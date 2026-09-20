@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// Turns geographic traces into unit-space points a `Shape` can draw.

@@ -41,6 +41,7 @@ private struct SettingsContent: View {
                 automaticTrackingCard
                 importCard
                 percentageCard
+                districtScopeCard
                 feedbackCard
                 backupCard
                 dataCard
@@ -247,6 +248,67 @@ private struct SettingsContent: View {
 
             SettingsNote(text: String(localized: "Turning this on makes every city larger, so your percentage goes down. Nothing you have walked is lost."))
         }
+    }
+
+    // MARK: - Neighbourhood scope
+
+    /// Hidden entirely when the pack carries no neighbourhoods, which is every
+    /// pack built so far: an empty picker is worse than no picker.
+    @ViewBuilder
+    private var districtScopeCard: some View {
+        if !environment.availableDistricts.isEmpty {
+            SettingsCard(title: String(localized: "What counts")) {
+                Text(String(localized: "Four percent of a whole city is discouraging. Forty percent of your own neighbourhood is a goal. Narrowing the count does not throw anything away: walks outside these neighbourhoods are kept, and they come back the moment you widen it again."))
+                    .font(WalkType.body)
+                    .foregroundStyle(WalkPalette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                districtRow(
+                    title: String(localized: "The whole city"),
+                    isOn: environment.scopedDistrictIDs.isEmpty
+                ) {
+                    Task { await environment.setDistrictScope([]) }
+                }
+
+                ForEach(environment.availableDistricts) { district in
+                    districtRow(
+                        title: district.name,
+                        isOn: environment.scopedDistrictIDs.contains(district.id)
+                    ) {
+                        var scope = environment.scopedDistrictIDs
+                        if scope.contains(district.id) {
+                            scope.remove(district.id)
+                        } else {
+                            scope.insert(district.id)
+                        }
+                        Task { await environment.setDistrictScope(scope) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func districtRow(title: String, isOn: Bool, toggle: @escaping () -> Void) -> some View {
+        Button(action: toggle) {
+            HStack(spacing: 12) {
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 17))
+                    .foregroundStyle(isOn ? WalkPalette.accent : WalkPalette.secondaryInk)
+
+                Text(title)
+                    .font(WalkType.body)
+                    .foregroundStyle(WalkPalette.ink)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 34)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isOn ? String(localized: "Counted") : String(localized: "Not counted"))
+        .accessibilityAddTraits(isOn ? [.isSelected, .isButton] : .isButton)
     }
 
     // MARK: - Feedback
