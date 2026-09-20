@@ -20,6 +20,7 @@ struct WalkTrackerApp: App {
                         .environmentObject(environment)
                 }
             }
+            .tint(WalkPalette.accent)
             .task { await launch.start() }
         }
     }
@@ -66,15 +67,15 @@ final class AppLaunch: ObservableObject {
 }
 
 private struct LaunchPlaceholderView: View {
+
     var body: some View {
         VStack(spacing: 16) {
             ProgressView()
-            Text(String(localized: "Opening your walks"))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .tint(WalkPalette.accent)
+            CapsLabel(text: String(localized: "Opening your walks"))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemBackground))
+        .walkPageBackground()
     }
 }
 
@@ -87,32 +88,34 @@ private struct LaunchFailureView: View {
         ScrollView {
             VStack(spacing: 18) {
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(WalkPalette.secondaryInk)
 
                 Text(String(localized: "WalkTracker could not start"))
-                    .font(.title3.weight(.semibold))
+                    .font(WalkType.screenTitle)
+                    .foregroundStyle(WalkPalette.ink)
                     .multilineTextAlignment(.center)
 
                 Text(String(localized: "Your walks are stored on this device and could not be opened."))
-                    .font(.callout)
+                    .font(WalkType.body)
+                    .foregroundStyle(WalkPalette.ink)
                     .multilineTextAlignment(.center)
 
                 Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(WalkType.caption)
+                    .foregroundStyle(WalkPalette.secondaryInk)
                     .multilineTextAlignment(.center)
 
                 Button(action: retry) {
                     Text(String(localized: "Try again"))
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
                 .accessibilityLabel(String(localized: "Try starting WalkTracker again"))
             }
-            .padding(24)
+            .padding(26)
             .frame(maxWidth: .infinity)
         }
+        .walkPageBackground()
     }
 }
 
@@ -126,12 +129,23 @@ private struct LaunchFailureView: View {
 struct RootView: View {
 
     @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        if environment.hasCompletedOnboarding {
-            MainTabView()
-        } else {
-            OnboardingScreen()
+        Group {
+            if environment.hasCompletedOnboarding {
+                MainTabView()
+            } else {
+                OnboardingScreen()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // iOS can deliver a significant-change wake while the app is
+            // suspended, so automatic tracking is given a chance to act on it
+            // every time the app comes back to the foreground.
+            if phase == .active {
+                environment.refreshPassiveTracking()
+            }
         }
     }
 }
@@ -150,16 +164,16 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             MapScreen()
-                .tabItem { Label(String(localized: "Map"), systemImage: "map") }
+                .tabItem { Label(String(localized: "Map"), systemImage: "map.fill") }
 
             StatsScreen()
-                .tabItem { Label(String(localized: "Stats"), systemImage: "chart.bar.xaxis") }
+                .tabItem { Label(String(localized: "Progress"), systemImage: "chart.bar.fill") }
 
-            CityListScreen()
-                .tabItem { Label(String(localized: "Cities"), systemImage: "building.2") }
+            CityListScreen.embeddedInNavigation()
+                .tabItem { Label(String(localized: "Cities"), systemImage: "building.2.fill") }
 
             SettingsScreen()
-                .tabItem { Label(String(localized: "Settings"), systemImage: "gearshape") }
+                .tabItem { Label(String(localized: "Settings"), systemImage: "gearshape.fill") }
         }
         .alert(
             String(localized: "Something went wrong"),
@@ -173,6 +187,17 @@ struct MainTabView: View {
             }
         } message: { message in
             Text(message)
+        }
+    }
+}
+
+extension CityListScreen {
+
+    /// The city list is used both as a tab and as a sheet from the map, and
+    /// only the tab supplies its own navigation stack.
+    static func embeddedInNavigation() -> some View {
+        NavigationStack {
+            CityListScreen()
         }
     }
 }

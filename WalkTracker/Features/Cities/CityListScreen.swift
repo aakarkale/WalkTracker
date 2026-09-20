@@ -18,14 +18,44 @@ struct CityListScreen: View {
     }
 
     var body: some View {
-        List {
-            availableSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                sectionHeader(String(localized: "Ready to walk"))
 
-            if !environment.catalog.pending.isEmpty {
-                pendingSection
+                ForEach(environment.catalog.available) { city in
+                    AvailableCityCard(
+                        city: city,
+                        state: environment.installState(for: city),
+                        isSelected: environment.selectedCity?.id == city.id,
+                        onSelect: { Task { await environment.selectCity(city) } },
+                        onInstall: { Task { await environment.installPack(for: city) } },
+                        onRemovePack: { Task { await environment.uninstallPack(for: city) } },
+                        onDeleteData: { cityPendingDataDeletion = city }
+                    )
+                }
+
+                Text(String(localized: "Street data is downloaded once and then used offline. Removing it leaves your walks untouched."))
+                    .font(WalkType.caption)
+                    .foregroundStyle(WalkPalette.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !environment.catalog.pending.isEmpty {
+                    sectionHeader(String(localized: "Not yet available"))
+                        .padding(.top, 8)
+
+                    ForEach(environment.catalog.pending) { city in
+                        UnavailableCityCard(city: city)
+                    }
+
+                    Text(String(localized: "These cities are on the list, but their street data has not been built yet, so there is nothing to download."))
+                        .font(WalkType.caption)
+                        .foregroundStyle(WalkPalette.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .padding(20)
         }
-        .listStyle(.insetGrouped)
+        .walkPageBackground()
         .navigationTitle(String(localized: "Cities"))
         .toolbar {
             if isPresented {
@@ -34,7 +64,9 @@ struct CityListScreen: View {
                         dismiss()
                     } label: {
                         Text(String(localized: "Done"))
+                            .font(WalkType.button)
                     }
+                    .tint(WalkPalette.accent)
                 }
             }
         }
@@ -61,44 +93,15 @@ struct CityListScreen: View {
         }
     }
 
-    // MARK: - Sections
-
-    private var availableSection: some View {
-        Section {
-            ForEach(environment.catalog.available) { city in
-                AvailableCityRow(
-                    city: city,
-                    state: environment.installState(for: city),
-                    isSelected: environment.selectedCity?.id == city.id,
-                    onSelect: { Task { await environment.selectCity(city) } },
-                    onInstall: { Task { await environment.installPack(for: city) } },
-                    onRemovePack: { Task { await environment.uninstallPack(for: city) } },
-                    onDeleteData: { cityPendingDataDeletion = city }
-                )
-            }
-        } header: {
-            Text(String(localized: "Ready to walk"))
-        } footer: {
-            Text(String(localized: "Street data is downloaded once and then used offline. Removing it leaves your walks untouched."))
-        }
-    }
-
-    private var pendingSection: some View {
-        Section {
-            ForEach(environment.catalog.pending) { city in
-                UnavailableCityRow(city: city)
-            }
-        } header: {
-            Text(String(localized: "Not yet available"))
-        } footer: {
-            Text(String(localized: "These cities are on the list, but their street data has not been built yet, so there is nothing to download."))
-        }
+    private func sectionHeader(_ title: String) -> some View {
+        CapsLabel(text: title)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-// MARK: - Rows
+// MARK: - Cards
 
-private struct AvailableCityRow: View {
+private struct AvailableCityCard: View {
 
     let city: City
     let state: PackInstallState
@@ -109,27 +112,31 @@ private struct AvailableCityRow: View {
     let onDeleteData: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 Button(action: onSelect) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 7) {
                             if isSelected {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(WalkPalette.walked)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(WalkPalette.accent)
                             }
                             Text(city.name)
-                                .font(.body.weight(.medium))
-                                .foregroundStyle(.primary)
+                                .font(WalkType.cardTitle)
+                                .foregroundStyle(WalkPalette.ink)
                         }
+
                         Text(city.country)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(WalkType.caption)
+                            .foregroundStyle(WalkPalette.secondaryInk)
+
                         Text(detailText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(WalkType.caption)
+                            .foregroundStyle(WalkPalette.secondaryInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(city.name)
@@ -142,19 +149,20 @@ private struct AvailableCityRow: View {
 
             if case .installing(let fraction) = state {
                 ProgressView(value: min(1, max(0, fraction)))
-                    .tint(WalkPalette.walked)
+                    .tint(WalkPalette.accent)
                     .accessibilityLabel(String(localized: "Download progress"))
                     .accessibilityValue(WalkFormat.compactPercentage(fraction: fraction))
             }
 
             if case .failed(let message) = state {
                 Text(message)
-                    .font(.caption)
+                    .font(WalkType.caption)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .walkCard(padding: 18)
     }
 
     @ViewBuilder
@@ -174,9 +182,10 @@ private struct AvailableCityRow: View {
                     Label(String(localized: "Delete my walks here"), systemImage: "figure.walk.motion")
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .frame(width: 32, height: 32)
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(WalkPalette.secondaryInk)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel(String(localized: "More options for \(city.name)"))
 
@@ -188,7 +197,7 @@ private struct AvailableCityRow: View {
                         : String(localized: "Retry")
                 )
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(SmallPillButtonStyle())
             .accessibilityLabel(String(localized: "Download the streets of \(city.name)"))
             .accessibilityHint(downloadHint)
         }
@@ -232,32 +241,35 @@ private struct AvailableCityRow: View {
 /// Shown, because people want to know whether their city is coming, but with
 /// nothing to tap: there is no file to download and no digest to verify it
 /// against, so offering a button would be a lie.
-private struct UnavailableCityRow: View {
+private struct UnavailableCityCard: View {
 
     let city: City
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(city.name)
-                    .font(.body.weight(.medium))
+                    .font(WalkType.cardTitle)
                 Text(city.country)
-                    .font(.caption)
+                    .font(WalkType.caption)
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(WalkPalette.secondaryInk)
 
             Spacer(minLength: 8)
 
-            Text(String(localized: "Not ready"))
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(uiColor: .tertiarySystemFill), in: Capsule())
-                .foregroundStyle(.secondary)
+            Text(String(localized: "Not published yet"))
+                .font(WalkType.label)
+                .textCase(.uppercase)
+                .kerning(0.6)
+                .foregroundStyle(WalkPalette.secondaryInk)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background(Capsule(style: .continuous).fill(WalkPalette.hairline))
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .walkCard(padding: 18)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "\(city.name), \(city.country)"))
-        .accessibilityValue(String(localized: "Street data not available yet"))
+        .accessibilityValue(String(localized: "Street data not published yet"))
     }
 }

@@ -20,49 +20,38 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
 
-	<!-- Permission strings. These are what App Review reads and what the
-	     person sees in the system dialog, so each one says what is collected,
-	     what it is used for, and what is lost by saying no. -->
-
+	<!-- Permission strings. These are user facing copy and are deliberately
+	     specific about what is recorded and what it costs, so the system
+	     prompt says the same thing the onboarding screens do. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>WalkTracker uses your location while you have a walk running to work out which streets you covered, and fills them in on your map of the city. Your location history is stored only on this device: there is no account, and nothing is uploaded.</string>
-
+	<string>WalkTracker records your location while a walk is running, so it can work out which streets you have covered. It stays on this device.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>WalkTracker needs background location so it can keep recording your route while your phone is in your pocket or the screen is off. Without it, a walk is only recorded while the app is on screen, and the streets you cover in between are lost. Recording only ever runs during a walk you start yourself, the blue location indicator stays visible the whole time, and your location history never leaves this device.</string>
-
+	<string>Allowing location all the time lets a walk keep recording with the screen off or while you use another app. It means continuous GPS for as long as the walk runs, which uses a noticeable amount of battery. Your location stays on this device.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>WalkTracker uses motion activity to tell walking apart from riding, so that a bus or taxi trip down a street is not counted as a street you walked. It is used only to decide whether a stretch of a route counts toward your coverage, and it is never stored or uploaded.</string>
+	<string>WalkTracker reads your step count and motion type so it can tell walking from riding, and so it does not credit you with streets you drove down.</string>
 
-	<!-- Background execution. The location mode is what keeps CoreLocation
-	     delivering fixes while the app is suspended; it is also what makes
-	     CLLocationManager.allowsBackgroundLocationUpdates legal to set. No
-	     other background mode is declared, because no other one is used. -->
+	<!-- Background location is what lets a walk continue in a pocket. The
+	     blue location indicator is left on deliberately: an app that records
+	     where you walk should be visibly recording. -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 	</array>
 
-	<!-- The app uses no encryption beyond Apple-provided TLS and the platform
-	     hashing in CryptoKit, both of which are exempt. -->
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-
-	<key>UIApplicationSceneManifest</key>
+	<key>UILaunchScreen</key>
 	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
+		<key>UIColorName</key>
+		<string></string>
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-
-	<!-- Empty dictionary means the modern storyboard-free launch screen: a
-	     plain window in the system background colour. -->
-	<key>UILaunchScreen</key>
-	<dict/>
-
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+		<string>location-services</string>
+		<string>gps</string>
+	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -76,13 +65,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-
-	<!-- location-services rather than gps: a Wi-Fi only iPad can still show
-	     your coverage map and manage city packs. -->
-	<key>UIRequiredDeviceCapabilities</key>
-	<array>
-		<string>arm64</string>
-		<string>location-services</string>
-	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

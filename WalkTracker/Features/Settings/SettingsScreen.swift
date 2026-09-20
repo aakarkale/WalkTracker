@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Settings, the data the app holds, and the attribution it owes.
 struct SettingsScreen: View {
@@ -28,11 +29,13 @@ private struct SettingsContent: View {
     @State private var exportURL: URL?
     @State private var isExporting = false
     @State private var isConfirmingDelete = false
+    @State private var isChoosingImportFile = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 18) {
                 automaticTrackingCard
+                importCard
                 percentageCard
                 feedbackCard
                 dataCard
@@ -124,6 +127,86 @@ private struct SettingsContent: View {
         case .idle: return "moon.zzz"
         case .watching: return "antenna.radiowaves.left.and.right"
         case .recording: return "record.circle"
+        }
+    }
+
+    // MARK: - Import
+
+    /// GPX files are usually `.gpx`, but some exporters hand them over as
+    /// plain XML, so both are accepted.
+    private var importContentTypes: [UTType] {
+        if let gpx = UTType(filenameExtension: "gpx") {
+            return [gpx, .xml]
+        }
+        return [.xml]
+    }
+
+    private var importCard: some View {
+        SettingsCard(title: String(localized: "Past walks")) {
+            Text(String(localized: "Already walked a lot of your city? Import a GPX file from another app and those walks count too. They are matched against the streets exactly the way a live walk is."))
+                .font(WalkType.body)
+                .foregroundStyle(WalkPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            switch environment.importState {
+            case .importing(let fraction):
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: min(1, max(0, fraction)))
+                        .tint(WalkPalette.accent)
+                    Text(String(localized: "Importing. A long history can take a few minutes."))
+                        .font(WalkType.caption)
+                        .foregroundStyle(WalkPalette.secondaryInk)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(String(localized: "Importing walks"))
+                .accessibilityValue(WalkFormat.compactPercentage(fraction: fraction))
+
+            case .finished(let result):
+                ImportResultView(result: result, cityName: environment.selectedCity?.name)
+
+                Button {
+                    environment.clearImportState()
+                } label: {
+                    Text(String(localized: "Done"))
+                }
+                .buttonStyle(SmallPillButtonStyle(filled: false))
+
+            case .failed(let message):
+                SettingsNote(text: message)
+
+                Button {
+                    environment.clearImportState()
+                    isChoosingImportFile = true
+                } label: {
+                    Text(String(localized: "Try another file"))
+                }
+                .buttonStyle(SmallPillButtonStyle(filled: false))
+
+            case .idle:
+                Button {
+                    isChoosingImportFile = true
+                } label: {
+                    Text(String(localized: "Import past walks"))
+                }
+                .buttonStyle(SmallPillButtonStyle(filled: false))
+                .disabled(environment.packContext == nil)
+                .accessibilityLabel(String(localized: "Import past walks from a GPX file"))
+
+                if environment.packContext == nil {
+                    SettingsNote(text: String(localized: "Choose a city and download its streets first, so there is something to match the walks against."))
+                }
+            }
+        }
+        .fileImporter(
+            isPresented: $isChoosingImportFile,
+            allowedContentTypes: importContentTypes
+        ) { result in
+            switch result {
+            case .success(let url):
+                Task { await environment.importGPX(from: url) }
+            case .failure(let error):
+                environment.errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -284,6 +367,54 @@ private struct SettingsCard<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .walkCard()
+    }
+}
+
+/// What an import actually did, in plain words.
+///
+/// Every one of these numbers answers a question the user would otherwise ask,
+/// and the out-of-city count in particular is usually large and is not a
+/// failure, so it says so.
+private struct ImportResultView: View {
+
+    let result: WalkImportService.Result
+    let cityName: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            line(String(localized: "\(result.sessionsCreated.formatted()) walks added"))
+
+            if result.sessionsSkippedAsDuplicate > 0 {
+                line(String(localized: "\(result.sessionsSkippedAsDuplicate.formatted()) were already in your history and were skipped"))
+            }
+            if result.tracksTooShort > 0 {
+                line(String(localized: "\(result.tracksTooShort.formatted()) were too short to match"))
+            }
+
+            line(String(localized: "\(result.pointsImported.formatted()) GPS points imported"))
+
+            if result.pointsOutsideCity > 0 {
+                line(String(
+                    localized: "\(result.pointsOutsideCity.formatted()) points were outside \(cityName ?? String(localized: "this city")) and could not be matched. That is normal: a GPX history covers holidays and other cities too."
+                ))
+            }
+
+            line(String(localized: "\(WalkFormat.distance(metres: result.newCoverageMetres)) of new street unlocked"))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func line(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(WalkPalette.accent)
+            Text(text)
+                .font(WalkType.caption)
+                .foregroundStyle(WalkPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

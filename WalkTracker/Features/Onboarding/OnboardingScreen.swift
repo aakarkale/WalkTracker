@@ -2,19 +2,20 @@ import SwiftUI
 import CoreLocation
 import UIKit
 
-/// First run: what the app records, then the two location prompts, in the
-/// order iOS requires them.
+/// First run: what the app records, then the two location prompts in the order
+/// iOS requires them, then a word about bringing existing history in.
 ///
 /// Deliberately not a funnel. Every screen explains before it asks, every ask
 /// can be declined, and declining moves forward rather than looping back. The
 /// app is useful with foreground-only location, so there is no reason to
-/// pressure anyone into "Always".
+/// pressure anyone into Always.
 struct OnboardingScreen: View {
 
     private enum Step {
         case intro
         case foreground
         case background
+        case history
     }
 
     @EnvironmentObject private var environment: AppEnvironment
@@ -25,22 +26,23 @@ struct OnboardingScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 26) {
                     icon
                     title
-                    body(for: step)
+                    stepBody
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 32)
-                .padding(.bottom, 24)
+                .padding(.horizontal, 26)
+                .padding(.top, 40)
+                .padding(.bottom, 28)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             controls
-                .padding(.horizontal, 24)
-                .padding(.bottom, 20)
+                .padding(.horizontal, 26)
+                .padding(.bottom, 24)
         }
-        .background(Color(uiColor: .systemBackground))
+        .walkPageBackground()
+        .animation(.smooth(duration: 0.3), value: step)
         .onChange(of: environment.authorizationStatus) { _, status in
             handleAuthorizationChange(status)
         }
@@ -50,23 +52,26 @@ struct OnboardingScreen: View {
 
     private var icon: some View {
         Image(systemName: iconName)
-            .font(.system(size: 44, weight: .regular))
-            .foregroundStyle(WalkPalette.walked)
+            .font(.system(size: 42, weight: .semibold))
+            .foregroundStyle(WalkPalette.accent)
             .accessibilityHidden(true)
     }
 
     private var iconName: String {
         switch step {
-        case .intro: return "map"
-        case .foreground: return "location"
+        case .intro: return "map.fill"
+        case .foreground: return "location.fill"
         case .background: return "figure.walk.motion"
+        case .history: return "square.and.arrow.down"
         }
     }
 
     private var title: some View {
         Text(titleText)
-            .font(.title.weight(.semibold))
+            .font(.system(size: 34, weight: .bold, design: .rounded))
+            .foregroundStyle(WalkPalette.ink)
             .fixedSize(horizontal: false, vertical: true)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -78,16 +83,18 @@ struct OnboardingScreen: View {
             return String(localized: "Location while a walk is running")
         case .background:
             return String(localized: "Recording with the phone in your pocket")
+        case .history:
+            return String(localized: "Bring your history with you")
         }
     }
 
     // MARK: - Body copy
 
     @ViewBuilder
-    private func body(for step: Step) -> some View {
+    private var stepBody: some View {
         switch step {
         case .intro:
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 20) {
                 point(
                     icon: "point.topleft.down.to.point.bottomright.curvepath",
                     text: String(localized: "While a walk is running, WalkTracker records your location and matches the trace to the street map, so it can work out which blocks you covered.")
@@ -107,7 +114,7 @@ struct OnboardingScreen: View {
             }
 
         case .foreground:
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 20) {
                 point(
                     icon: "play.circle",
                     text: String(localized: "Your location is read only while a walk is running. Starting and stopping a walk is always your decision.")
@@ -125,7 +132,7 @@ struct OnboardingScreen: View {
             }
 
         case .background:
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 20) {
                 point(
                     icon: "lock.iphone",
                     text: String(localized: "With Always access a walk keeps recording when the screen is off or you are using another app. Without it, recording stops the moment WalkTracker leaves the screen.")
@@ -143,19 +150,36 @@ struct OnboardingScreen: View {
                     text: String(localized: "Saying no is a normal way to use the app. iOS only asks this once, and you can change it later in the Settings app.")
                 )
             }
+
+        case .history:
+            VStack(alignment: .leading, spacing: 20) {
+                point(
+                    icon: "square.and.arrow.down",
+                    text: String(localized: "If you already have walks recorded elsewhere, export them as GPX and import them here. They are matched against the streets exactly the way a live walk is.")
+                )
+                point(
+                    icon: "percent",
+                    text: String(localized: "It means years of walking your city do not start at zero.")
+                )
+                point(
+                    icon: "gearshape",
+                    text: String(localized: "Import lives in Settings, under Past walks. Choose a city and download its streets first, then import whenever you like.")
+                )
+            }
         }
     }
 
     private func point(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
-                .font(.body)
-                .foregroundStyle(WalkPalette.walked)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(WalkPalette.accent)
                 .frame(width: 26, alignment: .center)
                 .accessibilityHidden(true)
 
             Text(text)
-                .font(.callout)
+                .font(WalkType.body)
+                .foregroundStyle(WalkPalette.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -178,7 +202,7 @@ struct OnboardingScreen: View {
                         openSystemSettings()
                     }
                     secondaryButton(String(localized: "Continue without location")) {
-                        finish()
+                        step = .history
                     }
                 } else if environment.hasLocationAccess {
                     primaryButton(String(localized: "Continue")) {
@@ -189,22 +213,27 @@ struct OnboardingScreen: View {
                         environment.requestWhenInUseAccess()
                     }
                     secondaryButton(String(localized: "Not now")) {
-                        finish()
+                        step = .history
                     }
                 }
 
             case .background:
                 if environment.hasBackgroundLocationAccess {
-                    primaryButton(String(localized: "Start walking")) {
-                        finish()
+                    primaryButton(String(localized: "Continue")) {
+                        step = .history
                     }
                 } else {
                     primaryButton(String(localized: "Allow background location")) {
                         environment.requestAlwaysAccess()
                     }
                     secondaryButton(String(localized: "Not now")) {
-                        finish()
+                        step = .history
                     }
+                }
+
+            case .history:
+                primaryButton(String(localized: "Start walking")) {
+                    finish()
                 }
             }
         }
@@ -213,12 +242,8 @@ struct OnboardingScreen: View {
     private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 28)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .tint(WalkPalette.walked)
+        .buttonStyle(PillButtonStyle())
         .accessibilityLabel(title)
     }
 
@@ -227,11 +252,8 @@ struct OnboardingScreen: View {
     private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 28)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.large)
+        .buttonStyle(PillButtonStyle(filled: false, tint: WalkPalette.secondaryInk))
         .accessibilityLabel(title)
     }
 
@@ -239,22 +261,22 @@ struct OnboardingScreen: View {
 
     private func handleAuthorizationChange(_ status: CLAuthorizationStatus) {
         switch step {
-        case .intro:
+        case .intro, .history:
             break
 
         case .foreground:
-            // Moving on by itself only when the answer was yes. A refusal
-            // leaves the user in control of what happens next rather than
-            // being marched to the next prompt.
+            // Moves on by itself only when the answer was yes. A refusal leaves
+            // the user in control of what happens next rather than being
+            // marched straight to the next prompt.
             if status == .authorizedWhenInUse {
                 step = .background
             } else if status == .authorizedAlways {
-                finish()
+                step = .history
             }
 
         case .background:
             if status == .authorizedAlways {
-                finish()
+                step = .history
             }
         }
     }
