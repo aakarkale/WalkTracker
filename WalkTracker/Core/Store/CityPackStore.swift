@@ -147,18 +147,82 @@ public final class CityPackStore: SegmentIndex {
         }) ?? []
     }
 
+    /// Totals for the whole city, computed in SQL.
+    ///
+    /// Aggregated in the database rather than by summing decoded segments.
+    /// A large city runs to tens of thousands of blocks, and loading them all
+    /// to add up their lengths would decode every geometry blob to use one
+    /// number from each row.
+    public struct Totals: Equatable, Sendable {
+        public let lengthMetres: Double
+        public let blockCount: Int
+    }
+
+    public func totals(includeOptional: Bool) -> Totals {
+        let sql = includeOptional
+            ? "SELECT COALESCE(SUM(length_m), 0), COUNT(*) FROM segment"
+            : "SELECT COALESCE(SUM(length_m), 0), COUNT(*) FROM segment WHERE class NOT IN (\(Self.optionalClassList))"
+        let rows = (try? database.query(sql) { ($0.double(0), Int($0.int(1))) }) ?? []
+        guard let first = rows.first else { return Totals(lengthMetres: 0, blockCount: 0) }
+        return Totals(lengthMetres: first.0, blockCount: first.1)
+    }
+
+    /// Per-district totals, computed in SQL for the same reason.
+    public func districtTotals(includeOptional: Bool) -> [Int64: Totals] {
+        let filter = includeOptional ? "" : "AND class NOT IN (\(Self.optionalClassList))"
+        let sql = """
+        SELECT district_id, COALESCE(SUM(length_m), 0), COUNT(*)
+        FROM segment WHERE district_id IS NOT NULL \(filter)
+        GROUP BY district_id
+        """
+        let rows = (try? database.query(sql) { row in
+            (row.int(0), Totals(lengthMetres: row.double(1), blockCount: Int(row.int(2))))
+        }) ?? []
+        return Dictionary(rows, uniquingKeysWith: { _, last in last })
+    }
+
+    /// Length, class and district for specific blocks, without their geometry.
+    ///
+    /// Used for statistics, where only the covered blocks matter and their
+    /// shapes do not. Queried in chunks because SQLite caps the number of
+    /// bound parameters in a single statement.
+    public struct Summary: Equatable, Sendable {
+        public let lengthMetres: Double
+        public let wayClass: WayClass
+        public let districtID: Int64?
+    }
+
+    public func summaries(ids: [Int64]) -> [Int64: Summary] {
+        guard !ids.isEmpty else { return [:] }
+        var result: [Int64: Summary] = [:]
+        result.reserveCapacity(ids.count)
+
+        for chunk in stride(from: 0, to: ids.count, by: 400).map({
+            Array(ids[$0..<min($0 + 400, ids.count)])
+        }) {
+            let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+            let sql = "SELECT id, length_m, class, district_id FROM segment WHERE id IN (\(placeholders))"
+            let rows = (try? database.query(sql, chunk.map { .integer($0) }) { row in
+                (row.int(0), Summary(
+                    lengthMetres: row.double(1),
+                    wayClass: WayClass(rawValue: row.string(2) ?? "") ?? .unclassified,
+                    districtID: row.optionalInt(3)
+                ))
+            }) ?? []
+            for (id, summary) in rows { result[id] = summary }
+        }
+        return result
+    }
+
+    private static let optionalClassList = WayClass.allCases
+        .filter(\.isOptionalByDefault)
+        .map { "'\($0.rawValue)'" }
+        .joined(separator: ",")
+
     /// Total walkable length, excluding classes left out of the default
     /// percentage unless `includeOptional` is set.
     public func totalLength(includeOptional: Bool) -> Double {
-        if includeOptional {
-            let rows = (try? database.query("SELECT SUM(length_m) FROM segment") { $0.double(0) }) ?? []
-            return rows.first ?? 0
-        }
-        let excluded = WayClass.allCases.filter(\.isOptionalByDefault).map { "'\($0.rawValue)'" }.joined(separator: ",")
-        let rows = (try? database.query("SELECT SUM(length_m) FROM segment WHERE class NOT IN (\(excluded))") {
-            $0.double(0)
-        }) ?? []
-        return rows.first ?? 0
+        totals(includeOptional: includeOptional).lengthMetres
     }
 
     // MARK: - Decoding

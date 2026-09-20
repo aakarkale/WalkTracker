@@ -231,11 +231,12 @@ def iter_elements(
                         way = _way_from_element(elem, counters)
                         if way is not None:
                             yield ("way", way)
-                elif tag == "relation" and "relation" in wanted:
-                    # Counted only when asked for, so that a caller making two
-                    # passes over the same file (ways, then nodes) does not
-                    # tally the same relations twice.
-                    counters.relations_skipped += 1
+                    elif tag == "relation":
+                        # Tallied but never yielded, and only when the caller
+                        # asked for relations, so that a caller making two
+                        # passes over one file (ways, then nodes) does not
+                        # count the same relations twice.
+                        counters.relations_skipped += 1
 
                 # Drop the element and detach it from the root. Without the
                 # root clear, ElementTree keeps every finished child attached
