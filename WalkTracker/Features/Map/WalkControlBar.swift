@@ -65,6 +65,15 @@ struct WalkControlBar: View {
                 pausedChip
             }
 
+            // Deliberately separate from the pause states above. Paused means
+            // the walk has stopped counting time. This means the walk is still
+            // running and the trace is still being written, but these streets
+            // will not be credited. Showing them the same way would be worse
+            // than showing nothing.
+            if let suspension = engine.coverageSuspension {
+                transitBadge(suspension)
+            }
+
             // A timeline rather than a timer object: SwiftUI drives the tick,
             // so nothing keeps running when this view is off screen. The clock
             // reads the engine's active duration, which excludes auto-paused
@@ -109,6 +118,32 @@ struct WalkControlBar: View {
         .background(Capsule(style: .continuous).fill(WalkPalette.hairline))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "Walk paused automatically because you stopped moving. It resumes on its own."))
+    }
+
+    private func transitBadge(_ suspension: TrackingEngine.CoverageSuspension) -> some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 7) {
+                Image(systemName: "car.fill")
+                    .font(.caption2)
+                Text(String(localized: "In transit"))
+                    .font(WalkType.label)
+                    .textCase(.uppercase)
+                    .kerning(0.8)
+            }
+            .foregroundStyle(.white)
+            .padding(.vertical, 7)
+            .padding(.horizontal, 13)
+            .background(Capsule(style: .continuous).fill(WalkPalette.recording))
+
+            Text(suspension.explanation)
+                .font(WalkType.caption)
+                .foregroundStyle(WalkPalette.secondaryInk)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "In transit"))
+        .accessibilityValue(suspension.explanation)
     }
 
     private func pauseNotice(_ reason: TrackingEngine.State.PauseReason) -> some View {

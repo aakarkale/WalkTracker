@@ -30,6 +30,10 @@ private struct SettingsContent: View {
     @State private var isExporting = false
     @State private var isConfirmingDelete = false
     @State private var isChoosingImportFile = false
+    @State private var isChoosingBackupFile = false
+    @State private var isConfirmingRestore = false
+    @State private var backupURL: URL?
+    @State private var isBackingUp = false
 
     var body: some View {
         ScrollView {
@@ -38,6 +42,7 @@ private struct SettingsContent: View {
                 importCard
                 percentageCard
                 feedbackCard
+                backupCard
                 dataCard
                 attributionCard
                 versionFooter
@@ -105,6 +110,19 @@ private struct SettingsContent: View {
                 .buttonStyle(SmallPillButtonStyle(filled: false))
             }
 
+            Toggle(isOn: $environment.showsRecordingIndicator) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "Show the recording indicator"))
+                        .font(WalkType.cardTitle)
+                        .foregroundStyle(WalkPalette.ink)
+                    Text(String(localized: "The indicator is how iOS shows that an app is using your location in the background. It is on by default for that reason."))
+                        .font(WalkType.caption)
+                        .foregroundStyle(WalkPalette.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(WalkPalette.accent)
+
             if environment.passiveTrackingEnabled, !passiveTracking.lastDecision.isEmpty {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: modeIcon)
@@ -143,7 +161,7 @@ private struct SettingsContent: View {
 
     private var importCard: some View {
         SettingsCard(title: String(localized: "Past walks")) {
-            Text(String(localized: "Already walked a lot of your city? Import a GPX file from another app and those walks count too. They are matched against the streets exactly the way a live walk is."))
+            Text(String(localized: "Already walked a lot of your city? Import a GPX file and those walks count too. They are matched against the streets exactly the way a live walk is. GPX is what Strava, Google Timeline and most other tools export."))
                 .font(WalkType.body)
                 .foregroundStyle(WalkPalette.ink)
                 .fixedSize(horizontal: false, vertical: true)
@@ -186,7 +204,7 @@ private struct SettingsContent: View {
                 Button {
                     isChoosingImportFile = true
                 } label: {
-                    Text(String(localized: "Import past walks"))
+                    Text(String(localized: "Import from a file"))
                 }
                 .buttonStyle(SmallPillButtonStyle(filled: false))
                 .disabled(environment.packContext == nil)
@@ -250,11 +268,139 @@ private struct SettingsContent: View {
         }
     }
 
+    // MARK: - Backup
+
+    private var backupCard: some View {
+        SettingsCard(title: String(localized: "Backup")) {
+            Text(String(localized: "Your walks are stored only on this phone. Deleting the app deletes them, and a year of coverage cannot be walked again. A backup is a single file you keep wherever you like, in Files, iCloud Drive or anywhere else."))
+                .font(WalkType.body)
+                .foregroundStyle(WalkPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let backupURL {
+                ShareLink(item: backupURL) {
+                    Text(String(localized: "Save backup file"))
+                }
+                .buttonStyle(SmallPillButtonStyle())
+                .accessibilityLabel(String(localized: "Save the backup file"))
+            } else {
+                Button {
+                    Task {
+                        isBackingUp = true
+                        backupURL = await environment.exportBackup()
+                        isBackingUp = false
+                    }
+                } label: {
+                    Text(
+                        isBackingUp
+                            ? String(localized: "Preparing")
+                            : String(localized: "Back up now")
+                    )
+                }
+                .buttonStyle(SmallPillButtonStyle())
+                .disabled(isBackingUp)
+                .accessibilityLabel(String(localized: "Create a backup of everything WalkTracker has recorded"))
+            }
+
+            restoreSection
+        }
+        .fileImporter(
+            isPresented: $isChoosingBackupFile,
+            allowedContentTypes: [.gzip, .data]
+        ) { result in
+            switch result {
+            case .success(let url):
+                Task { await environment.inspectBackup(at: url) }
+            case .failure(let error):
+                environment.errorMessage = error.localizedDescription
+            }
+        }
+        .confirmationDialog(
+            String(localized: "Replace everything with this backup?"),
+            isPresented: $isConfirmingRestore,
+            titleVisibility: .visible
+        ) {
+            Button(role: .destructive) {
+                environment.confirmRestore()
+            } label: {
+                Text(String(localized: "Replace my walks"))
+            }
+            Button(role: .cancel) { } label: {
+                Text(String(localized: "Cancel"))
+            }
+        } message: {
+            Text(String(localized: "Every walk currently on this phone is replaced by the walks in the backup. Anything recorded since that backup was made is lost."))
+        }
+    }
+
+    @ViewBuilder
+    private var restoreSection: some View {
+        switch environment.restoreState {
+        case .idle:
+            Button {
+                isChoosingBackupFile = true
+            } label: {
+                Text(String(localized: "Restore from backup"))
+            }
+            .buttonStyle(SmallPillButtonStyle(filled: false))
+            .accessibilityHint(String(localized: "Replaces the walks on this phone with the ones in a backup file"))
+
+        case .inspecting:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(String(localized: "Reading the backup"))
+                    .font(WalkType.caption)
+                    .foregroundStyle(WalkPalette.secondaryInk)
+            }
+
+        case .ready(let info):
+            BackupInfoView(info: info)
+
+            HStack(spacing: 10) {
+                Button {
+                    isConfirmingRestore = true
+                } label: {
+                    Text(String(localized: "Restore this backup"))
+                }
+                .buttonStyle(SmallPillButtonStyle(filled: false, tint: .red))
+
+                Button {
+                    environment.cancelRestore()
+                } label: {
+                    Text(String(localized: "Cancel"))
+                }
+                .buttonStyle(SmallPillButtonStyle(filled: false, tint: WalkPalette.secondaryInk))
+            }
+
+        case .handedOff:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(String(localized: "Restoring. The app will reopen with your restored walks."))
+                    .font(WalkType.caption)
+                    .foregroundStyle(WalkPalette.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+        case .failed(let message):
+            SettingsNote(text: message)
+
+            Button {
+                environment.cancelRestore()
+                isChoosingBackupFile = true
+            } label: {
+                Text(String(localized: "Try another file"))
+            }
+            .buttonStyle(SmallPillButtonStyle(filled: false))
+        }
+    }
+
     // MARK: - Data
 
     private var dataCard: some View {
         SettingsCard(title: String(localized: "Your data")) {
-            Text(String(localized: "Everything WalkTracker records stays on this device. There is no account, no server and no analytics, and your location is never sent anywhere. The only thing the app downloads is street data for a city."))
+            Text(String(localized: "Everything WalkTracker records stays on this device. There is no account, no server and no analytics, and your location is never sent anywhere. The only thing the app downloads is street data for a city. That also means nothing is kept for you if the app is deleted, so keep a backup."))
                 .font(WalkType.body)
                 .foregroundStyle(WalkPalette.ink)
                 .fixedSize(horizontal: false, vertical: true)
@@ -415,6 +561,42 @@ private struct ImportResultView: View {
                 .foregroundStyle(WalkPalette.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+/// What is actually inside a backup file, shown before anything is replaced.
+private struct BackupInfoView: View {
+
+    let info: BackupService.Info
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            line(String(localized: "\(info.sessionCount.formatted()) walks"))
+            line(String(localized: "\(info.pointCount.formatted()) GPS points"))
+
+            if !info.cityIDs.isEmpty {
+                line(String(localized: "Cities: \(info.cityIDs.joined(separator: ", "))"))
+            }
+            if let createdAt = info.createdAt {
+                line(String(localized: "Made \(WalkFormat.sessionDate(createdAt))"))
+            }
+            line(WalkFormat.downloadSize(bytes: Int64(info.uncompressedBytes)))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(WalkPalette.hairline)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(localized: "What is in this backup"))
+    }
+
+    private func line(_ text: String) -> some View {
+        Text(text)
+            .font(WalkType.caption)
+            .foregroundStyle(WalkPalette.ink)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

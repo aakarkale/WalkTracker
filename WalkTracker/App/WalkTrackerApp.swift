@@ -10,7 +10,9 @@ struct WalkTrackerApp: App {
             Group {
                 switch launch.phase {
                 case .loading:
-                    LaunchPlaceholderView()
+                    LaunchPlaceholderView(message: String(localized: "Opening your walks"))
+                case .restoring:
+                    LaunchPlaceholderView(message: String(localized: "Restoring your walks"))
                 case .failed(let message):
                     LaunchFailureView(message: message) {
                         Task { await launch.start() }
@@ -39,6 +41,9 @@ final class AppLaunch: ObservableObject {
 
     enum Phase {
         case loading
+        /// The database file is being replaced from a backup. A separate phase
+        /// from `loading` because it is worth saying so on screen.
+        case restoring
         case failed(String)
         case ready(AppEnvironment)
     }
@@ -55,7 +60,7 @@ final class AppLaunch: ObservableObject {
             }.value
 
             let environment = AppEnvironment(services: services)
-            phase = .ready(environment)
+            attach(environment)
 
             // Recovering an open session and opening the selected city's pack
             // happen after the first frame, so the UI is already on screen.
@@ -64,15 +69,52 @@ final class AppLaunch: ObservableObject {
             phase = .failed(error.localizedDescription)
         }
     }
+
+    /// Replaces the database with a verified backup and rebuilds the app.
+    ///
+    /// The order matters and is the whole reason this lives here rather than in
+    /// `AppEnvironment`: SQLite holds the database file open, so the current
+    /// environment has to be released before the file is swapped. Moving to a
+    /// phase that does not carry it is what releases it, and the short wait
+    /// afterwards gives SwiftUI time to tear down the views that were holding
+    /// it too. Core keeps the old database aside and puts it back if the swap
+    /// fails, so the worst case is the user's existing data, not neither.
+    func restore(with data: Data) async {
+        phase = .restoring
+        try? await Task.sleep(for: .milliseconds(600))
+
+        do {
+            let services = try await Task.detached(priority: .userInitiated) { () -> CoreServices in
+                let destination = try AppEnvironment.databaseURL()
+                try BackupService().restore(decompressed: data, to: destination)
+                return try AppEnvironment.makeServices()
+            }.value
+
+            let environment = AppEnvironment(services: services)
+            attach(environment)
+            await environment.bootstrap()
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func attach(_ environment: AppEnvironment) {
+        environment.performRestore = { [weak self] data in
+            await self?.restore(with: data)
+        }
+        phase = .ready(environment)
+    }
 }
 
 private struct LaunchPlaceholderView: View {
+
+    let message: String
 
     var body: some View {
         VStack(spacing: 16) {
             ProgressView()
                 .tint(WalkPalette.accent)
-            CapsLabel(text: String(localized: "Opening your walks"))
+            CapsLabel(text: message)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .walkPageBackground()

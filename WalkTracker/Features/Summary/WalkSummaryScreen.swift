@@ -64,15 +64,40 @@ struct WalkSummaryScreen: View {
             HeroNumber(
                 value: WalkFormat.distance(metres: summary.newCoverageMetres),
                 size: 64,
-                color: WalkPalette.accent
+                color: unlockedSomething ? WalkPalette.accent : WalkPalette.secondaryInk
             )
             CapsLabel(text: String(localized: "New street unlocked"))
+
+            // A walk that unlocks nothing is completely normal: walking home
+            // along streets already done is the most ordinary thing there is
+            // in this app, and the copy should not read like a failure.
+            if !unlockedSomething {
+                Text(String(localized: "All streets you had already walked. Still counted as a walk."))
+                    .font(WalkType.caption)
+                    .foregroundStyle(WalkPalette.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            }
+
+            if summary.uncreditedMetres > 200 {
+                Text(String(localized: "\(WalkFormat.distance(metres: summary.uncreditedMetres)) was not counted, because the motion data said you were riding rather than walking."))
+                    .font(WalkType.caption)
+                    .foregroundStyle(WalkPalette.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity)
         .walkCard(padding: 26)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "New street unlocked"))
         .accessibilityValue(WalkFormat.distance(metres: summary.newCoverageMetres))
+    }
+
+    private var unlockedSomething: Bool {
+        summary.newCoverageMetres >= 1
     }
 
     private var statsCard: some View {

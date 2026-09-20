@@ -81,11 +81,24 @@ struct WalkSummary: Identifiable, Sendable {
     /// The hero number: street that was not walked before this walk.
     let newCoverageMetres: Double
     let newBlocks: Int
+    /// Distance travelled during the walk that was deliberately not credited,
+    /// because the motion data said it was riding rather than walking.
+    let uncreditedMetres: Double
     let percentBefore: Double
     let percentAfter: Double
     /// The trace itself, for the little map at the top of the summary.
     let route: [Coordinate]
     let milestones: [Milestone]
+}
+
+/// Where a restore from backup has got to.
+enum RestoreState: Equatable {
+    case idle
+    case inspecting
+    /// Inspected and waiting for the user to confirm the swap.
+    case ready(BackupService.Info)
+    case handedOff
+    case failed(String)
 }
 
 /// Where a GPX import has got to.
@@ -166,6 +179,7 @@ final class AppEnvironment: ObservableObject {
     /// without every view having to observe the database.
     @Published private(set) var coverageRevision = 0
     @Published private(set) var importState: GPXImportState = .idle
+    @Published private(set) var restoreState: RestoreState = .idle
     /// Set when a walk ends, cleared when the summary is dismissed.
     @Published var pendingSummary: WalkSummary?
     @Published private(set) var isPreparingSummary = false
@@ -198,9 +212,26 @@ final class AppEnvironment: ObservableObject {
     /// to bind to. Never set here without going through `setPassiveTracking`.
     @Published private(set) var passiveTrackingEnabled = false
 
+    /// Whether iOS shows its recording indicator while a walk runs. On by
+    /// default: it is how the system tells the user this app is recording.
+    @Published var showsRecordingIndicator: Bool {
+        didSet {
+            defaults.set(showsRecordingIndicator, forKey: Keys.showsRecordingIndicator)
+            tracker.showsRecordingIndicator = showsRecordingIndicator
+        }
+    }
+
     private let defaults = UserDefaults.standard
     private var authorizationSubscription: AnyCancellable?
     private var coverageSubscription: AnyCancellable?
+
+    /// The decompressed backup waiting for the user to confirm the restore.
+    private var pendingRestoreData: Data?
+
+    /// Installed by `AppLaunch`. A restore replaces the database file, which
+    /// can only be done while nothing holds it open, so the app rebuilds
+    /// itself around the new file instead of swapping it underneath.
+    var performRestore: (@Sendable (Data) async -> Void)?
 
     /// Snapshot taken before the current walk started, so milestones can be
     /// detected by comparing it with the state afterwards.
@@ -214,6 +245,7 @@ final class AppEnvironment: ObservableObject {
         static let includeOptionalWays = "includeOptionalWays"
         static let hapticsEnabled = "hapticsEnabled"
         static let passiveTrackingEnabled = "passiveTrackingEnabled"
+        static let showsRecordingIndicator = "showsRecordingIndicator"
     }
 
     var catalog: CityCatalog { services.catalog }
@@ -247,8 +279,10 @@ final class AppEnvironment: ObservableObject {
         // Absent means "never set", which for haptics is on. `bool(forKey:)`
         // alone cannot tell "never set" from "set to false".
         self.hapticsEnabled = defaults.object(forKey: Keys.hapticsEnabled) as? Bool ?? true
+        self.showsRecordingIndicator = defaults.object(forKey: Keys.showsRecordingIndicator) as? Bool ?? true
 
         haptics.isEnabled = hapticsEnabled
+        tracker.showsRecordingIndicator = showsRecordingIndicator
 
         // Authorization status is read through this object all over the UI, so
         // the nested observer's changes are forwarded here. Without this, a
@@ -280,6 +314,22 @@ final class AppEnvironment: ObservableObject {
     /// the main thread: opening the database runs migrations, and the catalog
     /// is parsed from the bundle. Neither belongs on the main thread at launch.
     nonisolated static func makeServices() throws -> CoreServices {
+        let container = try applicationContainer()
+        let userDatabase = try UserDatabase(fileURL: try databaseURL())
+        let catalog = try CityCatalog.load()
+        let packsDirectory = container.appendingPathComponent("Packs", isDirectory: true)
+
+        let downloader = CityPackDownloader(baseURL: catalog.packBaseURL, packsDirectory: packsDirectory)
+
+        return CoreServices(
+            userDatabase: userDatabase,
+            catalog: catalog,
+            downloader: downloader,
+            packsDirectory: packsDirectory
+        )
+    }
+
+    nonisolated static func applicationContainer() throws -> URL {
         let fileManager = FileManager.default
         let base = try fileManager.url(
             for: .applicationSupportDirectory,
@@ -289,18 +339,13 @@ final class AppEnvironment: ObservableObject {
         )
         let container = base.appendingPathComponent("WalkTracker", isDirectory: true)
         try fileManager.createDirectory(at: container, withIntermediateDirectories: true)
+        return container
+    }
 
-        let userDatabase = try UserDatabase(fileURL: container.appendingPathComponent("user.sqlite"))
-        let catalog = try CityCatalog.load()
-        let packsDirectory = container.appendingPathComponent("Packs", isDirectory: true)
-        let downloader = CityPackDownloader(baseURL: catalog.packBaseURL, packsDirectory: packsDirectory)
-
-        return CoreServices(
-            userDatabase: userDatabase,
-            catalog: catalog,
-            downloader: downloader,
-            packsDirectory: packsDirectory
-        )
+    /// Where the user's database lives. Exposed because a restore has to
+    /// replace that exact file while nothing has it open.
+    nonisolated static func databaseURL() throws -> URL {
+        try applicationContainer().appendingPathComponent("user.sqlite")
     }
 
     // MARK: Launch
@@ -593,6 +638,9 @@ final class AppEnvironment: ObservableObject {
     func stopWalk() {
         let finishedSessionID = engine.session?.id
         let before = snapshotBeforeWalk
+        // Read before the engine is told to stop: it only changes on a fix, but
+        // there is no reason to depend on that.
+        let uncredited = engine.uncreditedMetres
         snapshotBeforeWalk = nil
 
         do {
@@ -606,7 +654,11 @@ final class AppEnvironment: ObservableObject {
         Task {
             await refreshCityStats()
             if let finishedSessionID {
-                await prepareSummary(sessionID: finishedSessionID, before: before)
+                await prepareSummary(
+                    sessionID: finishedSessionID,
+                    before: before,
+                    uncreditedMetres: uncredited
+                )
             }
         }
     }
@@ -618,7 +670,11 @@ final class AppEnvironment: ObservableObject {
     /// The engine closes a walk on its own queue, so the totals land in the
     /// database a moment after `stopWalk` returns. The summary waits for the
     /// session row to be closed rather than reading half-written numbers.
-    private func prepareSummary(sessionID: Int64, before: MilestoneDetector.Snapshot?) async {
+    private func prepareSummary(
+        sessionID: Int64,
+        before: MilestoneDetector.Snapshot?,
+        uncreditedMetres: Double
+    ) async {
         guard let context = packContext, let cityID = selectedCity?.id else { return }
 
         isPreparingSummary = true
@@ -653,6 +709,7 @@ final class AppEnvironment: ObservableObject {
             distanceMetres: session.distanceMetres,
             newCoverageMetres: session.newCoverageMetres,
             newBlocks: newBlocks,
+            uncreditedMetres: uncreditedMetres,
             percentBefore: percentBefore,
             percentAfter: percentAfter,
             route: route,
@@ -896,6 +953,69 @@ final class AppEnvironment: ObservableObject {
 
     func clearImportState() {
         importState = .idle
+    }
+
+    // MARK: Backup and restore
+
+    /// Writes a compressed copy of the whole database to a temporary file.
+    ///
+    /// Coverage lives only on this device, which is the right privacy answer
+    /// but means losing the phone loses a year of walking. A backup is the
+    /// answer to that, and it is a file the user holds rather than an account
+    /// they sign into.
+    func exportBackup() async -> URL? {
+        let services = self.services
+        let url = await Task.detached(priority: .userInitiated) { () -> URL? in
+            try? BackupService().export(database: services.userDatabase)
+        }.value
+
+        if url == nil {
+            errorMessage = String(localized: "The backup could not be written.")
+        }
+        return url
+    }
+
+    /// Reads a candidate backup and reports what is in it, without touching
+    /// anything. A restore replaces everything, so it is shown first.
+    func inspectBackup(at url: URL) async {
+        restoreState = .inspecting
+
+        do {
+            let inspection = try await Task.detached(priority: .userInitiated) { () -> (info: BackupService.Info, decompressed: Data) in
+                // A file from the picker lives outside the sandbox and has to
+                // be opened through its security scope.
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                return try BackupService().inspect(fileAt: url)
+            }.value
+
+            pendingRestoreData = inspection.decompressed
+            restoreState = .ready(inspection.info)
+        } catch {
+            pendingRestoreData = nil
+            restoreState = .failed(error.localizedDescription)
+        }
+    }
+
+    func cancelRestore() {
+        pendingRestoreData = nil
+        restoreState = .idle
+    }
+
+    /// Hands the verified backup to `AppLaunch`, which rebuilds the app around
+    /// it.
+    ///
+    /// Deliberately fire and forget rather than awaited: this object holds the
+    /// open database, and the file cannot be replaced until it has been
+    /// released. Awaiting from here would keep it alive for exactly as long as
+    /// the swap takes.
+    func confirmRestore() {
+        guard let data = pendingRestoreData, let performRestore else { return }
+        pendingRestoreData = nil
+        restoreState = .handedOff
+
+        let handoff = performRestore
+        Task.detached { await handoff(data) }
     }
 
     // MARK: Deleting data
