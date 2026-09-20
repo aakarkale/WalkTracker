@@ -109,11 +109,13 @@ class IntervalSetLite:
     @property
     def coverage(self): return sum(b-a for a,b in self.iv)
 
-print(f"{'noise':>6} {'precision':>10} {'recall':>8} {'wrong streets':>14}  (10 routes each, 80m grid)")
-print("-"*56)
-for noise in (5, 10, 15, 20, 25):
-    ps, rs, ws = [], [], []
-    for seed in range(10):
-        p, r, w, nt = run(noise, seed)
-        ps.append(p); rs.append(r); ws.append(w)
-    print(f"{noise:>5}m {sum(ps)/len(ps):>10.3f} {sum(rs)/len(rs):>8.3f} {sum(ws)/len(ws):>14.1f}")
+if __name__ == "__main__":
+    print(f"{'noise':>6} {'precision':>10} {'recall':>8} {'wrong streets':>14}  (10 routes each, 80m grid)")
+    print("-"*56)
+    for noise in (5, 10, 15, 20, 25):
+        ps, rs, ws = [], [], []
+        for seed in range(10):
+            p, r, w, nt = run(noise, seed)
+            ps.append(p); rs.append(r); ws.append(w)
+        print(f"{noise:>5}m {sum(ps)/len(ps):>10.3f} {sum(rs)/len(rs):>8.3f} {sum(ws)/len(ws):>14.1f}")
+

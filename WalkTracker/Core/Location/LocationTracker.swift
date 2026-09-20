@@ -95,6 +95,7 @@ public final class LocationTracker: NSObject {
         }
 
         isTracking = true
+        setLowPower(false)
         manager.startUpdatingLocation()
         startMotionUpdates()
     }
@@ -106,6 +107,18 @@ public final class LocationTracker: NSObject {
         manager.allowsBackgroundLocationUpdates = false
         motionManager?.stopActivityUpdates()
         currentActivity = nil
+    }
+
+    /// Drops to coarse positioning while the walker is standing still.
+    ///
+    /// Continuous best-accuracy GPS is the most expensive thing this app does.
+    /// Someone sitting in a cafe for an hour gains nothing from metre-level
+    /// fixes, so accuracy is relaxed until they move again. Updates keep
+    /// flowing, which is what lets movement be detected and full accuracy
+    /// restored.
+    public func setLowPower(_ enabled: Bool) {
+        manager.desiredAccuracy = enabled ? kCLLocationAccuracyHundredMeters : kCLLocationAccuracyBest
+        manager.distanceFilter = enabled ? 25 : kCLDistanceFilterNone
     }
 
     private func startMotionUpdates() {

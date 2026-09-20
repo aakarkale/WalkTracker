@@ -252,4 +252,3 @@ class Matcher:
         self.dec=[]; self.last_fin=None; self.last_pt=None
         return [c for c in out if c[2]-c[1] > 0]
 
-print("port loaded")

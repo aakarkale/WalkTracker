@@ -23,6 +23,9 @@ public final class TrackingEngine: ObservableObject {
             case permissionLost
             case noCityPack
             case inVehicle
+            /// The walker has stopped moving. Recording continues at reduced
+            /// accuracy and resumes on its own.
+            case standingStill
         }
     }
 
@@ -43,6 +46,26 @@ public final class TrackingEngine: ObservableObject {
     private var hasPack = false
     private var lastRawFix: CLLocation?
     private var pointCount = 0
+
+    /// Where the walker last actually moved, and when.
+    private var lastMovementAt: Date?
+    private var lastMovementFix: CLLocation?
+    private var pausedTotal: TimeInterval = 0
+    private var pausedSince: Date?
+
+    /// How long without meaningful movement before pausing. Long enough to sit
+    /// through a traffic light or a shop queue without the walk pausing, short
+    /// enough that a lunch stop does not burn the battery at full accuracy.
+    private static let stillnessTimeout: TimeInterval = 120
+    /// Movement below this is noise rather than walking.
+    private static let movementThresholdMetres: Double = 20
+
+    /// Elapsed time with auto-paused stretches removed, for the walk timer.
+    public var activeDuration: TimeInterval {
+        guard let session else { return 0 }
+        let paused = pausedTotal + (pausedSince.map { Date().timeIntervalSince($0) } ?? 0)
+        return max(0, Date().timeIntervalSince(session.startedAt) - paused)
+    }
 
     public init(
         tracker: LocationTracker,
@@ -85,6 +108,10 @@ public final class TrackingEngine: ObservableObject {
         segmentsTouchedThisWalk = []
         lastRawFix = nil
         pointCount = 0
+        lastMovementAt = Date()
+        lastMovementFix = nil
+        pausedTotal = 0
+        pausedSince = nil
 
         processor.beginWalk()
         state = .tracking
@@ -93,6 +120,10 @@ public final class TrackingEngine: ObservableObject {
 
     public func stopWalk() throws {
         tracker.stop()
+        if let since = pausedSince {
+            pausedTotal += Date().timeIntervalSince(since)
+            pausedSince = nil
+        }
 
         guard let session else {
             state = .idle
@@ -142,7 +173,9 @@ public final class TrackingEngine: ObservableObject {
     // MARK: - Ingest
 
     private func handle(locations: [CLLocation]) {
-        guard state == .tracking, let session else { return }
+        // Auto-paused is still recording, so both states accept fixes.
+        guard state == .tracking || state == .paused(reason: .standingStill) else { return }
+        guard let session else { return }
 
         var accepted: [TrackPoint] = []
 
@@ -181,6 +214,8 @@ public final class TrackingEngine: ObservableObject {
         lastFix = locations.last
         pointCount += accepted.count
 
+        updateStillness(with: locations.last)
+
         // Read on the main actor, since CoreMotion state is published there.
         let claimCoverage = tracker.motionPermitsCoverage
 
@@ -192,6 +227,46 @@ public final class TrackingEngine: ObservableObject {
                 self.segmentsTouchedThisWalk.formUnion(outcome.segmentsTouched)
             }
         }
+    }
+    /// Pauses the walk when the walker has stood still, and resumes it when
+    /// they move again.
+    ///
+    /// Compared against a fix rather than a running total, because GPS noise
+    /// accumulates into hundreds of metres of apparent movement for someone
+    /// standing perfectly still.
+    private func updateStillness(with fix: CLLocation?) {
+        guard let fix else { return }
+
+        let anchor = lastMovementFix ?? fix
+        let moved = fix.distance(from: anchor)
+        let noiseFloor = max(
+            Self.movementThresholdMetres,
+            0.5 * (fix.horizontalAccuracy + anchor.horizontalAccuracy)
+        )
+
+        if moved > noiseFloor {
+            lastMovementFix = fix
+            lastMovementAt = fix.timestamp
+            if state == .paused(reason: .standingStill) {
+                if let since = pausedSince {
+                    pausedTotal += Date().timeIntervalSince(since)
+                    pausedSince = nil
+                }
+                state = .tracking
+                tracker.setLowPower(false)
+            }
+            return
+        }
+
+        if lastMovementFix == nil { lastMovementFix = fix }
+
+        guard state == .tracking,
+              let since = lastMovementAt,
+              fix.timestamp.timeIntervalSince(since) >= Self.stillnessTimeout else { return }
+
+        pausedSince = Date()
+        state = .paused(reason: .standingStill)
+        tracker.setLowPower(true)
     }
 }
 
