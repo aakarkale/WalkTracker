@@ -190,6 +190,12 @@ docs/             pack format, build instructions
 See `docs/building.md`. In short: install XcodeGen, run `xcodegen generate`,
 open the project, set your own bundle identifier and signing team.
 
+The bundle identifier in `project.yml` is the placeholder
+`com.example.walktracker` (and `com.example.walktracker.tests` for the test
+target). `com.example.` is a reserved example domain: it will not code sign and
+will not install on a device, so change it to your own before building for
+anything but the simulator.
+
 To get past an empty city list you also need to build at least one pack with
 `Tools/citypack`, host it over HTTPS, and paste the resulting descriptor into
 `cities.json`. The pipeline prints it in the right shape.

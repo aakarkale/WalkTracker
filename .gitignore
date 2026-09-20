@@ -1,2 +1,83 @@
+# --------------------------------------------------------------------------
+# Generated Xcode project
+#
+# The project file is produced from project.yml by XcodeGen and is not a
+# source of truth. Committing it would mean every branch carries merge
+# conflicts in a 3000 line pbxproj that nobody reads. See docs/building.md.
+# --------------------------------------------------------------------------
+*.xcodeproj/
+*.xcworkspace/
+
+# --------------------------------------------------------------------------
+# Xcode
+# --------------------------------------------------------------------------
+build/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# Xcode 8+ / SwiftPM local state
+.swiftpm/
+Packages/
+Package.resolved
+.build/
+
+# Instruments and profiling output
+*.trace
+
+# --------------------------------------------------------------------------
+# macOS
+# --------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# --------------------------------------------------------------------------
+# City pack build artefacts
+#
+# OSM extracts and built packs are large, reproducible, and served from a CDN
+# rather than from the repository. A fixture that is deliberately checked in
+# can still be added with `git add -f`.
+# --------------------------------------------------------------------------
+*.osm
+*.osm.gz
+*.osm.pbf
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite.gz
+Tools/citypack/out/
+
+# --------------------------------------------------------------------------
+# Python tooling
+# --------------------------------------------------------------------------
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+venv/
+
+# --------------------------------------------------------------------------
+# Editors
+# --------------------------------------------------------------------------
+*.swp
+*~
+.idea/
+.vscode/
