@@ -28,10 +28,12 @@ percentage means something. Walk half of Bleecker Street and half of it counts.
 Three things about the state of this repository, stated up front because they
 change what you should do next.
 
-**Nothing here has been compiled.** This was built in a Linux container with no
-Swift toolchain and no Xcode, so every Swift file is unverified against a
-compiler. Expect to fix compile errors on the first build. The algorithms are a
-different matter and are covered below.
+**It compiles now, but it did not for most of its life.** This was built in a
+Linux container with no Swift toolchain, so nothing was ever checked against a
+compiler until CI was added. The first CI run found two compile errors across
+roughly fifteen thousand lines, and the first test run found twelve failures,
+eleven of them real bugs in the backup path. All are fixed. CI builds on macOS
+and runs the tests on every push.
 
 **No reference screenshots were received.** The request mentioned attaching
 screenshots of an existing app for reference, but none arrived with the

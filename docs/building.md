@@ -3,9 +3,11 @@
 The Xcode project is generated from `project.yml` rather than committed, so the
 first build takes one extra step.
 
-Nothing in this repository has been compiled. It was written in a Linux
-container with no Swift toolchain and no Xcode, so expect to fix compile errors
-on the first build.
+This was written in a Linux container with no Swift toolchain, so for most of
+its life none of it had been compiled. That is no longer true: CI now builds
+it on a macOS runner and runs the test suite on every push, and the first run
+found exactly two compile errors across roughly fifteen thousand lines, both
+since fixed. See `.github/workflows/ci.yml`.
 
 ## Requirements
 
@@ -113,9 +115,9 @@ To make downloads work:
 3. Point `packBaseURL` in `cities.json` at where you hosted it, and paste the
    descriptor the build printed into that city's `pack` field.
 
-Until all three are done, the city list is browsable and nothing is
-downloadable. Tracking needs an installed pack, because coverage is recorded
-against the blocks in it.
+Until all three are done, nothing is downloadable, though a pack can still be
+loaded from a file as above. Tracking needs an installed pack either way,
+because coverage is recorded against the blocks in it.
 
 ## Permissions while testing
 
