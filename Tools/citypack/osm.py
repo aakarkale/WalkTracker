@@ -195,6 +195,9 @@ def iter_elements(
     `kind` is "node" or "way"; `obj` is a `Node` or `Way`. Elements the caller
     did not ask for are still cleared, so passing `want=("way",)` costs a scan
     of the file but not the memory of its nodes.
+
+    Including "relation" in `want` tallies relations in the counters. They are
+    never yielded: nothing in a city pack is built from a relation.
     """
     if counters is None:
         counters = ParseCounters()
@@ -228,7 +231,10 @@ def iter_elements(
                         way = _way_from_element(elem, counters)
                         if way is not None:
                             yield ("way", way)
-                elif tag == "relation":
+                elif tag == "relation" and "relation" in wanted:
+                    # Counted only when asked for, so that a caller making two
+                    # passes over the same file (ways, then nodes) does not
+                    # tally the same relations twice.
                     counters.relations_skipped += 1
 
                 # Drop the element and detach it from the root. Without the
@@ -247,8 +253,8 @@ def iter_nodes(path: str, counters: Optional[ParseCounters] = None) -> Iterator[
 
 
 def iter_ways(path: str, counters: Optional[ParseCounters] = None) -> Iterator[Way]:
-    """Stream only the ways of an extract."""
-    for _, obj in iter_elements(path, want=("way",), counters=counters):
+    """Stream only the ways of an extract, tallying relations on the way past."""
+    for _, obj in iter_elements(path, want=("way", "relation"), counters=counters):
         yield obj  # type: ignore[misc]
 
 

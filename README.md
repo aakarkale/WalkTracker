@@ -1,0 +1,172 @@
+# WalkTracker
+
+An iOS app for tracking which streets of a city you have actually walked.
+
+Coverage is recorded block by block against the real street network, so the
+percentage means something: metres of street walked over metres of walkable
+street. Walk half of Bleecker Street and you get credit for half of it.
+
+---
+
+## Read this first
+
+Three things about the state of this repository, stated up front because they
+change what you should do next.
+
+**Nothing here has been compiled.** This was built in a Linux container with no
+Swift toolchain and no Xcode, so every Swift file is unverified against a
+compiler. Expect to fix compile errors on the first build. The algorithms are a
+different matter and are covered below.
+
+**No reference screenshots were received.** The request mentioned attaching
+screenshots of an existing app for reference, but none arrived with the
+message. The interface here was designed from the described concept alone. If
+you still want a specific visual direction matched, send the screenshots.
+
+**No city packs exist yet.** Every city in the catalog has a null pack
+descriptor. The app will list all twenty cities and let you download none of
+them until you build packs with the pipeline and host them. That is deliberate:
+a digest and file size can only come from a real build, and inventing them
+would produce a catalog that fails verification on first download.
+
+## What was actually verified
+
+The parts that carry real algorithmic risk were ported to Python and tested,
+since the Swift could not be run.
+
+| Area | How it was checked | Result |
+|---|---|---|
+| Interval merging | Line-for-line Python port, unit cases plus 2000-trial fuzz | Disjoint invariant held, coverage correct |
+| Map matching | Python port, simulated walks on an 80 m grid with realistic GPS noise | Precision 0.994 to 1.000, recall 0.997 at 5 to 25 m noise |
+| Gzip framing | Header parser checked against real gzip files and 8 malformed inputs | Correct, no crashes |
+| Everything else | Not executed | Unverified |
+
+The matching numbers are from simulation, not from a real walk with a real
+phone. Treat them as evidence the algorithm is sound, not as field results.
+
+## How coverage works
+
+The obvious approach is a fog-of-war grid: chop the city into squares and light
+them up as you enter them. It was rejected. Most squares in a city are
+buildings, water and rooftops you cannot walk on, so "23% of the city" would
+mean nothing, and there would be no way to say you had finished a street.
+
+Instead every walkable OpenStreetMap way is split at its intersections into
+blocks, and coverage is stored per block as a set of merged intervals along it.
+That gives an honest denominator, street names, neighbourhood completion, and a
+sensible answer to "what should I walk next".
+
+### Matching GPS to streets
+
+Snapping each fix to the nearest street fails in exactly the cities this app is
+for. With 20 m of urban-canyon error and streets 60 m apart, nearest-street
+flickers between parallel roads and paints streets nobody walked.
+
+The pipeline instead runs:
+
+1. **Gating.** Drop fixes with bad accuracy, implausible speed, or invalid
+   coordinates.
+2. **Smoothing.** Average fixes into 8-second buckets. This is the stage that
+   matters most. At 1 Hz a walker covers 1.4 m between fixes while error runs
+   10 to 25 m, so a single fix says almost nothing about direction. Averaging
+   cuts noise by the square root of the sample count while the walker moves far
+   enough to establish a heading. Adding it moved precision from 0.67 to 0.99
+   in simulation.
+3. **Hidden Markov matching.** Each smoothed fix gets candidate blocks scored
+   by distance from the block and by how well movement along the network
+   matches movement on the ground, with a directional term and a cost for
+   turning. A sliding-window Viterbi pass picks the best sequence.
+4. **Despeckling.** A one-fix hop onto a side street with the same block either
+   side is noise, not a detour, and gets pulled back.
+
+The matcher is deliberately biased toward under-reporting. When it cannot
+explain how you got from one fix to the next, it claims nothing. A missing
+block is a much smaller harm than a street wrongly marked walked, because the
+first is fixed by walking it again and the second is invisible and permanent.
+
+### Why raw traces are kept forever
+
+Coverage is an opinion derived from the trace, the matcher and the pack
+version. All three change. Keeping every fix means coverage can be rebuilt,
+which is what makes a pack update or a matcher improvement safe rather than
+destructive. `CoverageRebuilder` does this, and it runs automatically when a
+pack version changes, because segment ids are pack-local and stale ids would
+silently credit the wrong streets.
+
+## Privacy and security
+
+Location history is about as sensitive as personal data gets. The decisions
+that follow from that:
+
+- **Nothing leaves the device.** No account, no analytics, no sync, no crash
+  reporting. The only network request the app makes is fetching a city pack,
+  which reveals only which city you picked.
+- **Zero third-party dependencies.** Every line that touches location data is
+  in this repository. SQLite is wrapped directly, gzip is decoded directly.
+- **Data protection** is set to complete-until-first-user-authentication on the
+  database and its write-ahead log. Not the stronger complete setting, which
+  would make the file unreadable while the screen is locked and break the
+  entire point of background tracking. This is the strongest level compatible
+  with recording in your pocket.
+- **Deletion is real.** Delete runs `VACUUM`, because without it the freed
+  pages keep your old coordinates on disk until something happens to overwrite
+  them.
+- **Packs are not trusted.** Each is verified against a SHA-256 digest that
+  ships inside the signed binary, before decompression and before SQLite is
+  pointed at it. A compromised or intercepted CDN can serve a wrong file but
+  cannot get it opened. Decompression is capped so a small archive cannot
+  expand without bound, and packs are opened read-only with every field
+  bounds-checked.
+- **The background location indicator stays on.** It could be hidden. An app
+  that records where you walk should be visibly recording.
+
+## The twenty cities
+
+New York, Paris, Barcelona, Amsterdam, Tokyo, London, Hong Kong, Copenhagen,
+Vienna, Prague, Boston, San Francisco, Florence, Venice, Lisbon, Berlin,
+Madrid, Singapore, Seoul, Montreal.
+
+This is a curated list, not a citation. There is no single authoritative
+ranking of the world's most walkable cities: published indexes disagree with
+each other and use different methodologies, so presenting any list as "the top
+twenty" would be dressing up an editorial choice as a fact. Edit
+`WalkTracker/Resources/cities.json` to change it. Nothing in the code depends
+on which cities are in the list.
+
+Coordinates in the catalog are approximate and frame the opening map view only.
+Each city's real boundary comes from its pack.
+
+## Layout
+
+```
+WalkTracker/
+  App/            app entry point and wiring
+  Core/
+    Geo/          coordinates, bounding boxes, polylines, geodesy
+    Model/        City, StreetSegment, WalkSession, TrackPoint
+    Matching/     interval sets, smoothing, the map matcher
+    Store/        SQLite wrapper, user database, coverage and session stores
+    Location/     CoreLocation and CoreMotion, the tracking engine
+    CityPack/     catalog, downloader, gzip, read-only pack access
+    Coverage/     statistics and rebuilding
+  Features/       SwiftUI screens
+  Resources/      cities.json
+Tools/citypack/   OpenStreetMap to pack pipeline
+Tests/            unit tests
+docs/             pack format, build instructions
+```
+
+## Getting it running
+
+See `docs/building.md`. In short: install XcodeGen, run `xcodegen generate`,
+open the project, set your own bundle identifier and signing team.
+
+To get past an empty city list you also need to build at least one pack with
+`Tools/citypack`, host it over HTTPS, and paste the resulting descriptor into
+`cities.json`. The pipeline prints it in the right shape.
+
+## Attribution
+
+Street data comes from OpenStreetMap, © OpenStreetMap contributors, licensed
+under the Open Database License. Any build that ships packs must display that
+attribution. It is a licence obligation, not a courtesy.
