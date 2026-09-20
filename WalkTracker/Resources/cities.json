@@ -1,0 +1,367 @@
+{
+  "catalogVersion": 1,
+  "_note": "Centres and radii are approximate and only frame the initial map camera. Each city's real boundary ships inside its pack. The pack field is null until Tools/citypack has built a real pack: the digest and sizes can only come from an actual build.",
+  "packBaseURL": "https://packs.example.invalid/walktracker/v1/",
+  "cities": [
+    {
+      "id": "new-york",
+      "name": "New York",
+      "country": "United States",
+      "countryCode": "US",
+      "center": {
+        "latitude": 40.7128,
+        "longitude": -74.006
+      },
+      "approxRadiusKm": 14,
+      "cameraBounds": {
+        "minLatitude": 40.5869,
+        "minLongitude": -74.1721,
+        "maxLatitude": 40.8387,
+        "maxLongitude": -73.8399
+      },
+      "pack": null
+    },
+    {
+      "id": "paris",
+      "name": "Paris",
+      "country": "France",
+      "countryCode": "FR",
+      "center": {
+        "latitude": 48.8566,
+        "longitude": 2.3522
+      },
+      "approxRadiusKm": 8,
+      "cameraBounds": {
+        "minLatitude": 48.7847,
+        "minLongitude": 2.2429,
+        "maxLatitude": 48.9285,
+        "maxLongitude": 2.4615
+      },
+      "pack": null
+    },
+    {
+      "id": "barcelona",
+      "name": "Barcelona",
+      "country": "Spain",
+      "countryCode": "ES",
+      "center": {
+        "latitude": 41.3874,
+        "longitude": 2.1686
+      },
+      "approxRadiusKm": 8,
+      "cameraBounds": {
+        "minLatitude": 41.3155,
+        "minLongitude": 2.0727,
+        "maxLatitude": 41.4593,
+        "maxLongitude": 2.2645
+      },
+      "pack": null
+    },
+    {
+      "id": "amsterdam",
+      "name": "Amsterdam",
+      "country": "Netherlands",
+      "countryCode": "NL",
+      "center": {
+        "latitude": 52.3676,
+        "longitude": 4.9041
+      },
+      "approxRadiusKm": 8,
+      "cameraBounds": {
+        "minLatitude": 52.2957,
+        "minLongitude": 4.7863,
+        "maxLatitude": 52.4395,
+        "maxLongitude": 5.0219
+      },
+      "pack": null
+    },
+    {
+      "id": "tokyo",
+      "name": "Tokyo",
+      "country": "Japan",
+      "countryCode": "JP",
+      "center": {
+        "latitude": 35.6762,
+        "longitude": 139.6503
+      },
+      "approxRadiusKm": 18,
+      "cameraBounds": {
+        "minLatitude": 35.5143,
+        "minLongitude": 139.451,
+        "maxLatitude": 35.8381,
+        "maxLongitude": 139.8496
+      },
+      "pack": null
+    },
+    {
+      "id": "london",
+      "name": "London",
+      "country": "United Kingdom",
+      "countryCode": "GB",
+      "center": {
+        "latitude": 51.5074,
+        "longitude": -0.1278
+      },
+      "approxRadiusKm": 18,
+      "cameraBounds": {
+        "minLatitude": 51.3455,
+        "minLongitude": -0.3879,
+        "maxLatitude": 51.6693,
+        "maxLongitude": 0.1323
+      },
+      "pack": null
+    },
+    {
+      "id": "hong-kong",
+      "name": "Hong Kong",
+      "country": "Hong Kong SAR",
+      "countryCode": "HK",
+      "center": {
+        "latitude": 22.3193,
+        "longitude": 114.1694
+      },
+      "approxRadiusKm": 14,
+      "cameraBounds": {
+        "minLatitude": 22.1934,
+        "minLongitude": 114.0333,
+        "maxLatitude": 22.4452,
+        "maxLongitude": 114.3055
+      },
+      "pack": null
+    },
+    {
+      "id": "copenhagen",
+      "name": "Copenhagen",
+      "country": "Denmark",
+      "countryCode": "DK",
+      "center": {
+        "latitude": 55.6761,
+        "longitude": 12.5683
+      },
+      "approxRadiusKm": 8,
+      "cameraBounds": {
+        "minLatitude": 55.6042,
+        "minLongitude": 12.4407,
+        "maxLatitude": 55.748,
+        "maxLongitude": 12.6959
+      },
+      "pack": null
+    },
+    {
+      "id": "vienna",
+      "name": "Vienna",
+      "country": "Austria",
+      "countryCode": "AT",
+      "center": {
+        "latitude": 48.2082,
+        "longitude": 16.3738
+      },
+      "approxRadiusKm": 9,
+      "cameraBounds": {
+        "minLatitude": 48.1273,
+        "minLongitude": 16.2523,
+        "maxLatitude": 48.2891,
+        "maxLongitude": 16.4953
+      },
+      "pack": null
+    },
+    {
+      "id": "prague",
+      "name": "Prague",
+      "country": "Czechia",
+      "countryCode": "CZ",
+      "center": {
+        "latitude": 50.0755,
+        "longitude": 14.4378
+      },
+      "approxRadiusKm": 8,
+      "cameraBounds": {
+        "minLatitude": 50.0036,
+        "minLongitude": 14.3257,
+        "maxLatitude": 50.1474,
+        "maxLongitude": 14.5499
+      },
+      "pack": null
+    },
+    {
+      "id": "boston",
+      "name": "Boston",
+      "country": "United States",
+      "countryCode": "US",
+      "center": {
+        "latitude": 42.3601,
+        "longitude": -71.0589
+      },
+      "approxRadiusKm": 9,
+      "cameraBounds": {
+        "minLatitude": 42.2792,
+        "minLongitude": -71.1684,
+        "maxLatitude": 42.441,
+        "maxLongitude": -70.9494
+      },
+      "pack": null
+    },
+    {
+      "id": "san-francisco",
+      "name": "San Francisco",
+      "country": "United States",
+      "countryCode": "US",
+      "center": {
+        "latitude": 37.7749,
+        "longitude": -122.4194
+      },
+      "approxRadiusKm": 8,
+      "cameraBounds": {
+        "minLatitude": 37.703,
+        "minLongitude": -122.5104,
+        "maxLatitude": 37.8468,
+        "maxLongitude": -122.3284
+      },
+      "pack": null
+    },
+    {
+      "id": "florence",
+      "name": "Florence",
+      "country": "Italy",
+      "countryCode": "IT",
+      "center": {
+        "latitude": 43.7696,
+        "longitude": 11.2558
+      },
+      "approxRadiusKm": 5,
+      "cameraBounds": {
+        "minLatitude": 43.7246,
+        "minLongitude": 11.1935,
+        "maxLatitude": 43.8146,
+        "maxLongitude": 11.3181
+      },
+      "pack": null
+    },
+    {
+      "id": "venice",
+      "name": "Venice",
+      "country": "Italy",
+      "countryCode": "IT",
+      "center": {
+        "latitude": 45.4408,
+        "longitude": 12.3155
+      },
+      "approxRadiusKm": 5,
+      "cameraBounds": {
+        "minLatitude": 45.3958,
+        "minLongitude": 12.2514,
+        "maxLatitude": 45.4858,
+        "maxLongitude": 12.3796
+      },
+      "pack": null
+    },
+    {
+      "id": "lisbon",
+      "name": "Lisbon",
+      "country": "Portugal",
+      "countryCode": "PT",
+      "center": {
+        "latitude": 38.7223,
+        "longitude": -9.1393
+      },
+      "approxRadiusKm": 8,
+      "cameraBounds": {
+        "minLatitude": 38.6504,
+        "minLongitude": -9.2315,
+        "maxLatitude": 38.7942,
+        "maxLongitude": -9.0471
+      },
+      "pack": null
+    },
+    {
+      "id": "berlin",
+      "name": "Berlin",
+      "country": "Germany",
+      "countryCode": "DE",
+      "center": {
+        "latitude": 52.52,
+        "longitude": 13.405
+      },
+      "approxRadiusKm": 14,
+      "cameraBounds": {
+        "minLatitude": 52.3941,
+        "minLongitude": 13.1981,
+        "maxLatitude": 52.6459,
+        "maxLongitude": 13.6119
+      },
+      "pack": null
+    },
+    {
+      "id": "madrid",
+      "name": "Madrid",
+      "country": "Spain",
+      "countryCode": "ES",
+      "center": {
+        "latitude": 40.4168,
+        "longitude": -3.7038
+      },
+      "approxRadiusKm": 10,
+      "cameraBounds": {
+        "minLatitude": 40.3269,
+        "minLongitude": -3.8219,
+        "maxLatitude": 40.5067,
+        "maxLongitude": -3.5857
+      },
+      "pack": null
+    },
+    {
+      "id": "singapore",
+      "name": "Singapore",
+      "country": "Singapore",
+      "countryCode": "SG",
+      "center": {
+        "latitude": 1.3521,
+        "longitude": 103.8198
+      },
+      "approxRadiusKm": 14,
+      "cameraBounds": {
+        "minLatitude": 1.2262,
+        "minLongitude": 103.6939,
+        "maxLatitude": 1.478,
+        "maxLongitude": 103.9457
+      },
+      "pack": null
+    },
+    {
+      "id": "seoul",
+      "name": "Seoul",
+      "country": "South Korea",
+      "countryCode": "KR",
+      "center": {
+        "latitude": 37.5665,
+        "longitude": 126.978
+      },
+      "approxRadiusKm": 14,
+      "cameraBounds": {
+        "minLatitude": 37.4406,
+        "minLongitude": 126.8192,
+        "maxLatitude": 37.6924,
+        "maxLongitude": 127.1368
+      },
+      "pack": null
+    },
+    {
+      "id": "montreal",
+      "name": "Montreal",
+      "country": "Canada",
+      "countryCode": "CA",
+      "center": {
+        "latitude": 45.5017,
+        "longitude": -73.5673
+      },
+      "approxRadiusKm": 10,
+      "cameraBounds": {
+        "minLatitude": 45.4118,
+        "minLongitude": -73.6956,
+        "maxLatitude": 45.5916,
+        "maxLongitude": -73.439
+      },
+      "pack": null
+    }
+  ]
+}

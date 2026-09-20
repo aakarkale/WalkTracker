@@ -1,0 +1,249 @@
+# XcodeGen project specification for WalkTracker.
+#
+# The .xcodeproj is generated from this file and is not committed: see
+# docs/building.md. Run `xcodegen generate` in the repository root after
+# changing anything here, or after adding a file to a directory that is not
+# already covered by one of the `sources` entries below.
+#
+# Source paths point at directories rather than individual files, so a new
+# Swift file anywhere under WalkTracker/ or Tests/WalkTrackerTests/ is picked
+# up on the next generate with no edit here.
+
+name: WalkTracker
+
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "17.0"
+  # Mirrors the folder structure in the Xcode navigator instead of flattening
+  # nested directories into one group.
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+  groupSortPosition: top
+  developmentLanguage: en
+  defaultConfig: Debug
+  minimumXcodeGenVersion: "2.38.0"
+
+configs:
+  Debug: debug
+  Release: release
+
+# ---------------------------------------------------------------------------
+# Project level build settings
+#
+# Warnings are turned up deliberately, but nothing here turns them into
+# errors: a warning that fails the build tends to get silenced rather than
+# fixed, and a compiler upgrade that adds a new warning should not stop the
+# team from building.
+# ---------------------------------------------------------------------------
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    SDKROOT: iphoneos
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+    # Build scripts run in a sandbox and must declare their inputs and
+    # outputs. There are no run-script phases today; this keeps it that way
+    # unless someone adds one deliberately.
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+    # Warnings on, warnings-as-errors off. See the note above.
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+    GCC_TREAT_WARNINGS_AS_ERRORS: NO
+
+    # Swift concurrency checking. `targeted` flags data races in code that has
+    # already opted into concurrency, without the flood of warnings that
+    # `complete` produces in a codebase that predates strict checking. Raise it
+    # to `complete` when the Sendable audit is done.
+    SWIFT_STRICT_CONCURRENCY: targeted
+
+    # Hardening and correctness.
+    CLANG_ENABLE_MODULES: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+    CLANG_ENABLE_OBJC_WEAK: YES
+    ENABLE_STRICT_OBJC_MSGSEND: YES
+    GCC_NO_COMMON_BLOCKS: YES
+    DEAD_CODE_STRIPPING: YES
+    CLANG_MODULES_AUTOLINK: YES
+
+    # Warning set. These are the Xcode recommended settings plus a few that
+    # catch real bugs in code that touches C APIs, which this project does in
+    # the SQLite and Compression wrappers.
+    CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING: YES
+    CLANG_WARN_BOOL_CONVERSION: YES
+    CLANG_WARN_COMMA: YES
+    CLANG_WARN_CONSTANT_CONVERSION: YES
+    CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS: YES
+    CLANG_WARN_DIRECT_OBJC_ISA_USAGE: YES_ERROR
+    CLANG_WARN_DOCUMENTATION_COMMENTS: YES
+    CLANG_WARN_EMPTY_BODY: YES
+    CLANG_WARN_ENUM_CONVERSION: YES
+    CLANG_WARN_INFINITE_RECURSION: YES
+    CLANG_WARN_INT_CONVERSION: YES
+    CLANG_WARN_NON_LITERAL_NULL_CONVERSION: YES
+    CLANG_WARN_OBJC_LITERAL_CONVERSION: YES
+    CLANG_WARN_OBJC_ROOT_CLASS: YES_ERROR
+    CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: YES
+    CLANG_WARN_RANGE_LOOP_ANALYSIS: YES
+    CLANG_WARN_STRICT_PROTOTYPES: YES
+    CLANG_WARN_SUSPICIOUS_MOVE: YES
+    CLANG_WARN_UNGUARDED_AVAILABILITY: YES_AGGRESSIVE
+    CLANG_WARN_UNREACHABLE_CODE: YES
+    CLANG_WARN__DUPLICATE_METHOD_MATCH: YES
+    GCC_WARN_64_TO_32_BIT_CONVERSION: YES
+    GCC_WARN_ABOUT_RETURN_TYPE: YES_ERROR
+    GCC_WARN_UNDECLARED_SELECTOR: YES
+    GCC_WARN_UNINITIALIZED_AUTOS: YES_AGGRESSIVE
+    GCC_WARN_UNUSED_FUNCTION: YES
+    GCC_WARN_UNUSED_VARIABLE: YES
+
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      SWIFT_COMPILATION_MODE: incremental
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      GCC_PREPROCESSOR_DEFINITIONS: "DEBUG=1 $(inherited)"
+      GCC_OPTIMIZATION_LEVEL: "0"
+      ONLY_ACTIVE_ARCH: YES
+      # Required by `@testable import WalkTracker` in the test target, which is
+      # why the test action in the scheme below runs against Debug.
+      ENABLE_TESTABILITY: YES
+      DEBUG_INFORMATION_FORMAT: dwarf
+      COPY_PHASE_STRIP: NO
+      MTL_ENABLE_DEBUG_INFO: INCLUDE_SOURCE
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      SWIFT_COMPILATION_MODE: wholemodule
+      GCC_OPTIMIZATION_LEVEL: s
+      ONLY_ACTIVE_ARCH: NO
+      ENABLE_TESTABILITY: NO
+      ENABLE_NS_ASSERTIONS: NO
+      DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
+      COPY_PHASE_STRIP: NO
+      STRIP_INSTALLED_PRODUCT: YES
+      STRIP_STYLE: "non-global"
+      VALIDATE_PRODUCT: YES
+      MTL_ENABLE_DEBUG_INFO: NO
+
+targets:
+
+  # -------------------------------------------------------------------------
+  # The app
+  # -------------------------------------------------------------------------
+  WalkTracker:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+
+    sources:
+      # All app code. Info.plist is referenced through INFOPLIST_FILE below
+      # rather than being copied as a resource, and the resources directory is
+      # listed separately so its build phase is explicit.
+      - path: WalkTracker
+        excludes:
+          - "App/Info.plist"
+          - "Resources/**"
+          - "**/.DS_Store"
+      # cities.json ships inside the app bundle. CityCatalog.load(from:) reads
+      # it from Bundle.main at launch, and it carries the SHA-256 digests that
+      # every downloaded city pack is verified against, so it must be bundled
+      # rather than fetched.
+      - path: WalkTracker/Resources
+        buildPhase: resources
+
+    dependencies:
+      # Swift autolinks most of these on `import`, but they are declared
+      # explicitly so the link line is visible and does not silently change.
+      # See docs/building.md if any of these paths need adjusting for a
+      # different SDK layout.
+      - sdk: CoreLocation.framework      # GPS fixes and authorisation
+      - sdk: CoreMotion.framework        # walking vs riding classification
+      - sdk: MapKit.framework            # map rendering
+      - sdk: CryptoKit.framework         # SHA-256 verification of city packs
+      - sdk: libsqlite3.tbd              # user database and city packs
+      # Compression is not listed: it is part of libsystem on iOS and Swift
+      # autolinks it from "import Compression". An explicit libcompression.tbd
+      # is a macOS SDK path and fails to link here.
+
+    settings:
+      base:
+        # Placeholder identifier. Change this, and the development team, to
+        # your own before building on a device or submitting anything. See
+        # docs/building.md.
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.walktracker
+        PRODUCT_NAME: WalkTracker
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+
+        # A hand written Info.plist, not a generated one: the location and
+        # motion usage strings are user facing text that belongs in version
+        # control and in code review.
+        INFOPLIST_FILE: WalkTracker/App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        ENABLE_PREVIEWS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+
+  # -------------------------------------------------------------------------
+  # Unit tests
+  # -------------------------------------------------------------------------
+  WalkTrackerTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+
+    sources:
+      - path: Tests/WalkTrackerTests
+        excludes:
+          - "**/.DS_Store"
+      # The same catalog file the app ships, copied into the test bundle so
+      # CityCatalogTests can decode the real thing rather than a fixture that
+      # could drift away from it.
+      - path: WalkTracker/Resources/cities.json
+        buildPhase: resources
+
+    dependencies:
+      - target: WalkTracker
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.walktracker.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Hosted by the app, which is what lets `@testable import WalkTracker`
+        # see the app's internal declarations.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/WalkTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WalkTracker"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        CODE_SIGN_STYLE: Automatic
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @loader_path/Frameworks"
+
+schemes:
+  WalkTracker:
+    build:
+      targets:
+        WalkTracker: all
+        WalkTrackerTests: [test]
+    run:
+      config: Debug
+      # Simulated location is the only practical way to exercise tracking on a
+      # simulator. Xcode ships no default GPX file, so this is left unset and
+      # chosen from Debug > Simulate Location at run time.
+      askForAppToLaunch: false
+    test:
+      # Debug, because @testable import needs ENABLE_TESTABILITY.
+      config: Debug
+      gatherCoverageData: true
+      coverageTargets:
+        - WalkTracker
+      targets:
+        - WalkTrackerTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
