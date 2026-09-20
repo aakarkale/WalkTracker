@@ -38,6 +38,30 @@ public final class TrackingEngine: ObservableObject {
     /// without re-reading the whole coverage table on every fix.
     @Published public private(set) var segmentsTouchedThisWalk: Set<Int64> = []
 
+    /// Set while the trace is still being recorded but no street is being
+    /// credited.
+    ///
+    /// A distinct idea from being paused, and worth keeping distinct. Riding a
+    /// bus is not a break in the walk, it is a stretch that happened and must
+    /// not count. Without showing this, somebody who rides a bus along a
+    /// street they also walk will conclude the app is broken.
+    @Published public private(set) var coverageSuspension: CoverageSuspension?
+
+    /// Metres travelled during this walk that were deliberately not credited.
+    @Published public private(set) var uncreditedMetres: Double = 0
+
+    public enum CoverageSuspension: Equatable, Sendable {
+        /// Motion data says this is a vehicle, not walking.
+        case inVehicle
+
+        public var explanation: String {
+            switch self {
+            case .inVehicle:
+                return String(localized: "Not counting streets while you are riding.")
+            }
+        }
+    }
+
     private let tracker: LocationTracker
     private let sessionStore: SessionStore
     private let processor: WalkProcessor
@@ -106,6 +130,8 @@ public final class TrackingEngine: ObservableObject {
         distanceMetres = 0
         newCoverageMetres = 0
         segmentsTouchedThisWalk = []
+        coverageSuspension = nil
+        uncreditedMetres = 0
         lastRawFix = nil
         pointCount = 0
         lastMovementAt = Date()
@@ -204,7 +230,10 @@ public final class TrackingEngine: ObservableObject {
                 // Counting them would clock up distance for someone standing
                 // still at a crossing.
                 let noiseFloor = 0.5 * (location.horizontalAccuracy + previous.horizontalAccuracy)
-                if step > noiseFloor { distanceMetres += step }
+                if step > noiseFloor {
+                    distanceMetres += step
+                    if coverageSuspension != nil { uncreditedMetres += step }
+                }
             }
             lastRawFix = location
         }
@@ -218,6 +247,8 @@ public final class TrackingEngine: ObservableObject {
 
         // Read on the main actor, since CoreMotion state is published there.
         let claimCoverage = tracker.motionPermitsCoverage
+        let suspension: CoverageSuspension? = claimCoverage ? nil : .inVehicle
+        if suspension != coverageSuspension { coverageSuspension = suspension }
 
         processor.ingest(accepted, claimCoverage: claimCoverage) { [weak self] outcome in
             guard outcome.newCoverageMetres > 0 || !outcome.segmentsTouched.isEmpty else { return }
