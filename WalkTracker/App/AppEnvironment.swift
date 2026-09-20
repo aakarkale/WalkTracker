@@ -594,8 +594,75 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
+    /// Installs a pack from a file the user picked, rather than downloading.
+    ///
+    /// The point is to make a locally built pack usable without hosting it
+    /// first. Everything after the file is read follows the same path as a
+    /// download, including the coverage rebuild when the pack turns out to be
+    /// a different one from what was installed before.
+    func installLocalPack(from fileURL: URL, for city: City) async {
+        guard !installState(for: city).isInstalling else { return }
+        installStates[city.id] = .installing(fraction: 0)
+
+        let services = self.services
+        let cityID = city.id
+
+        // Security-scoped access is what makes a file chosen through the
+        // document picker readable at all. Without the matching stop the
+        // scope leaks for the life of the process.
+        let scoped = fileURL.startAccessingSecurityScopedResource()
+        defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
+
+        do {
+            let outcome = try await Task.detached(priority: .userInitiated) {
+                () -> (pack: CityPackDownloader.LocalPack, replaced: Bool, context: PackContext) in
+                let local = try services.downloader.installLocalPack(at: fileURL, expecting: city)
+
+                // Asked after the file is validated but before the record is
+                // overwritten. A different pack means every stored segment id
+                // for this city is about to stop meaning what it meant.
+                let replaced = (try? services.installedPacks.wouldReplaceDifferentPack(
+                    cityID: cityID,
+                    sha256: local.sha256
+                )) ?? false
+
+                let store = try CityPackStore(path: local.installedURL.path)
+                try? services.installedPacks.markInstalled(
+                    InstalledPackStore.Record(
+                        cityID: cityID,
+                        version: InstalledPackStore.sideLoadedVersion,
+                        installedAt: Date(),
+                        sha256: local.sha256,
+                        filename: local.installedURL.lastPathComponent
+                    )
+                )
+                return (local, replaced, PackContext(city: city, store: store))
+            }.value
+
+            installStates[cityID] = .installed
+
+            if outcome.replaced {
+                await rebuildCoverageAfterPackVersionChange(city: city, packStore: outcome.context.store)
+            }
+
+            if selectedCity == nil || selectedCity?.id == cityID {
+                selectedCity = city
+                defaults.set(cityID, forKey: Keys.selectedCityID)
+                packContext = outcome.context
+                engine.setCity(id: cityID, packStore: outcome.context.store)
+                await refreshCityStats()
+                coverageRevision += 1
+            }
+        } catch {
+            installStates[cityID] = .failed(error.localizedDescription)
+            report(error)
+        }
+    }
+
     func uninstallPack(for city: City) async {
-        guard city.pack != nil else { return }
+        // A side-loaded pack belongs to a city that may have no descriptor at
+        // all, so the presence of a file decides this, not the catalog.
+        guard city.pack != nil || services.downloader.hasLocalPack(city) else { return }
 
         // Never pull the street data out from under a walk in progress.
         if engine.state == .tracking, engine.session?.cityID == city.id {
@@ -1116,7 +1183,10 @@ final class AppEnvironment: ObservableObject {
 
     // MARK: Errors
 
-    private func report(_ error: Error) {
+    /// Surfaces an error to the user. Internal rather than private because a
+    /// view that catches one, such as the document picker, has nowhere else to
+    /// put it.
+    func report(_ error: Error) {
         errorMessage = error.localizedDescription
     }
 }

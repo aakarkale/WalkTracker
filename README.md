@@ -249,9 +249,12 @@ target). `com.example.` is a reserved example domain: it will not code sign and
 will not install on a device, so change it to your own before building for
 anything but the simulator.
 
-To get past an empty city list you also need to build at least one pack with
-`Tools/citypack`, host it over HTTPS, and paste the resulting descriptor into
-`cities.json`. The pipeline prints it in the right shape.
+To get past an empty city list, build a pack with `Tools/citypack` and load
+the file straight into the app from the Cities screen. No hosting required,
+which is the quickest way to see it working.
+
+To ship packs to other people, host them over HTTPS and paste the descriptor
+the pipeline prints into `cities.json`.
 
 ## Attribution
 
