@@ -85,6 +85,16 @@ public final class PassiveTrackingCoordinator: ObservableObject {
             return
         }
         tracker.startWatchingSignificantChanges()
+
+        // Without this the coordinator only ever hears about movement when the
+        // app is brought to the foreground, which defeats the entire feature:
+        // the point is to notice a walk while nobody is looking at the phone.
+        tracker.onSignificantChange = { [weak self] in
+            Task { @MainActor in
+                self?.significantChangeObserved()
+            }
+        }
+
         detector.start { [weak self] reading in
             Task { @MainActor in
                 self?.handle(reading: reading, reason: "motion changed")
@@ -96,6 +106,7 @@ public final class PassiveTrackingCoordinator: ObservableObject {
 
     private func stopEverything() {
         detector.stop()
+        tracker.onSignificantChange = nil
         tracker.stopWatchingSignificantChanges()
         idleTimer?.invalidate()
         idleTimer = nil

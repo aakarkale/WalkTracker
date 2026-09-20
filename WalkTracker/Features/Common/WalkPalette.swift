@@ -39,16 +39,45 @@ enum WalkPalette {
 
     // MARK: - Map
 
-    /// Walked streets. The accent, drawn slightly heavier than everything else
-    /// on the map, because it is the one thing the user is looking for.
-    static let walkedUIColor = accentUIColor
+    /// Walked streets, the bright core of the line.
+    ///
+    /// Deliberately not the same green as the interface accent. A button sits
+    /// on white and needs a green that reads against white; a walked street
+    /// sits on the map, and in dark mode that map is nearly black. The accent
+    /// green goes muddy there, so dark mode gets a neon lime that looks lit
+    /// rather than painted. That glow against a dark map is the single most
+    /// striking thing this app can put on screen, and it is worth a second
+    /// colour to get right.
+    static let walkedCoreUIColor = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.42, green: 0.98, blue: 0.35, alpha: 1.0)
+            : UIColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0)
+    }
+
+    /// The halo drawn under the core, wider and much fainter.
+    ///
+    /// This is what makes the line look luminous instead of merely coloured.
+    /// Faint in light mode, where a bloom over a pale map just reads as a
+    /// smudge, and strong in dark mode, where it does the work.
+    static let walkedGlowUIColor = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.42, green: 0.98, blue: 0.35, alpha: 0.28)
+            : UIColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 0.16)
+    }
+
+    /// Kept for interface use: chips, legends and anything off the map.
+    static let walkedUIColor = walkedCoreUIColor
 
     /// Streets still to walk. A light warm grey: present enough to read as a
     /// street network, quiet enough that the accent pops off it. The map should
     /// feel like a clean canvas the accent is drawn onto, not a street atlas.
     static let unwalkedUIColor = UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.42, green: 0.40, blue: 0.38, alpha: 0.85)
+            // Quieter in dark mode than the light-mode equivalent. The dark
+            // base map already draws its own streets clearly, so this only has
+            // to mark which of them are in scope, and anything louder competes
+            // with the green it exists to set off.
+            ? UIColor(red: 0.55, green: 0.56, blue: 0.60, alpha: 0.38)
             : UIColor(red: 0.76, green: 0.73, blue: 0.70, alpha: 0.95)
     }
 

@@ -6,13 +6,6 @@ public protocol LocationTrackerDelegate: AnyObject {
     func locationTracker(_ tracker: LocationTracker, didReceive locations: [CLLocation])
     func locationTracker(_ tracker: LocationTracker, didChange status: CLAuthorizationStatus)
     func locationTracker(_ tracker: LocationTracker, didFailWith error: Error)
-    /// The device has moved far enough for iOS to wake the app. Cheap, coarse,
-    /// and the only thing that runs while nothing else is tracking.
-    func locationTrackerDidObserveSignificantChange(_ tracker: LocationTracker)
-}
-
-public extension LocationTrackerDelegate {
-    func locationTrackerDidObserveSignificantChange(_ tracker: LocationTracker) {}
 }
 
 /// Wraps CoreLocation and CoreMotion for continuous walk tracking.
@@ -41,6 +34,15 @@ public final class LocationTracker: NSObject {
 
     public private(set) var isTracking = false
     public private(set) var isWatchingSignificantChanges = false
+
+    /// Called when the device has moved far enough for iOS to wake the app.
+    ///
+    /// A closure rather than a delegate method on purpose. There is one
+    /// delegate slot and the tracking engine already holds it, but the thing
+    /// that cares about these wakes is the passive coordinator, which sits
+    /// above the engine. Routing it through the delegate would mean the engine
+    /// holding a reference back up to its own owner.
+    public var onSignificantChange: (() -> Void)?
 
     /// Whether iOS shows the blue recording indicator during a walk.
     ///
@@ -199,7 +201,7 @@ extension LocationTracker: CLLocationManagerDelegate {
         // not route data. Feeding them to the matcher would draw a straight
         // line across half a city.
         if !isTracking {
-            delegate?.locationTrackerDidObserveSignificantChange(self)
+            onSignificantChange?()
             return
         }
         delegate?.locationTracker(self, didReceive: locations)

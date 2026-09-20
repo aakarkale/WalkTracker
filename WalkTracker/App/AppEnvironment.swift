@@ -218,6 +218,13 @@ final class AppEnvironment: ObservableObject {
     /// to bind to. Never set here without going through `setPassiveTracking`.
     @Published private(set) var passiveTrackingEnabled = false
 
+    /// How the base map is themed. Independent of the rest of the interface,
+    /// because the dark map with its neon coverage is worth choosing on its
+    /// own merits rather than only as a side effect of a system setting.
+    @Published var mapAppearance: MapAppearance = .system {
+        didSet { defaults.set(mapAppearance.rawValue, forKey: Keys.mapAppearance) }
+    }
+
     /// Whether iOS shows its recording indicator while a walk runs. On by
     /// default: it is how the system tells the user this app is recording.
     @Published var showsRecordingIndicator: Bool {
@@ -246,6 +253,7 @@ final class AppEnvironment: ObservableObject {
     private var lastKnownCompletedBlocks = 0
 
     private enum Keys {
+        static let mapAppearance = "mapAppearance"
         static let selectedCityID = "selectedCityID"
         static let onboardingCompleted = "onboardingCompleted"
         static let includeOptionalWays = "includeOptionalWays"
@@ -289,6 +297,8 @@ final class AppEnvironment: ObservableObject {
         // alone cannot tell "never set" from "set to false".
         self.hapticsEnabled = defaults.object(forKey: Keys.hapticsEnabled) as? Bool ?? true
         self.showsRecordingIndicator = defaults.object(forKey: Keys.showsRecordingIndicator) as? Bool ?? true
+        self.mapAppearance = defaults.string(forKey: Keys.mapAppearance)
+            .flatMap(MapAppearance.init(rawValue:)) ?? .system
 
         haptics.isEnabled = hapticsEnabled
         tracker.showsRecordingIndicator = showsRecordingIndicator

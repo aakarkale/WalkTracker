@@ -314,6 +314,21 @@ private struct SettingsContent: View {
     // MARK: - Feedback
 
     private var feedbackCard: some View {
+        SettingsCard(title: String(localized: "Map")) {
+            Picker(
+                String(localized: "Appearance"),
+                selection: $environment.mapAppearance
+            ) {
+                ForEach(MapAppearance.allCases, id: \.self) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel(String(localized: "Map appearance"))
+
+            SettingsNote(text: String(localized: "The dark map draws walked streets as bright green over a near black background. It is independent of the rest of the app, so you can have one without the other."))
+        }
+
         SettingsCard(title: String(localized: "Feedback")) {
             Toggle(isOn: $environment.hapticsEnabled) {
                 VStack(alignment: .leading, spacing: 4) {

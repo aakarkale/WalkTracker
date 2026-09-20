@@ -19,14 +19,27 @@ final class StreetOverlayBundle: @unchecked Sendable {
 
     let unwalked: MKMultiPolyline?
     let walked: MKMultiPolyline?
+    /// The same lines as `walked`, drawn underneath, wider and fainter.
+    ///
+    /// A separate object because MapKit will not accept one overlay twice, and
+    /// two renderers over the same geometry is how a line is made to look lit
+    /// rather than merely coloured.
+    let walkedGlow: MKMultiPolyline?
     /// Identifies this set of overlays, so the map view can tell whether the
     /// overlays it is holding are still the current ones.
     let generation: Int
     let segmentCount: Int
 
-    init(unwalked: MKMultiPolyline?, walked: MKMultiPolyline?, generation: Int, segmentCount: Int) {
+    init(
+        unwalked: MKMultiPolyline?,
+        walked: MKMultiPolyline?,
+        walkedGlow: MKMultiPolyline?,
+        generation: Int,
+        segmentCount: Int
+    ) {
         self.unwalked = unwalked
         self.walked = walked
+        self.walkedGlow = walkedGlow
         self.generation = generation
         self.segmentCount = segmentCount
     }
@@ -68,6 +81,7 @@ struct StreetMapView: UIViewRepresentable {
 
     let overlays: StreetOverlayBundle?
     let showsUserLocation: Bool
+    var appearance: MapAppearance = .system
     let focus: MapFocusRequest?
     /// Incremented by the caller to ask the map to recentre on the user once.
     let followRequest: Int
@@ -84,16 +98,36 @@ struct StreetMapView: UIViewRepresentable {
         map.showsCompass = true
         map.showsScale = true
         map.isPitchEnabled = false
-        // The standard light base map, left exactly as Apple draws it. The
-        // coverage is what this screen is about, and it is drawn over the top:
-        // restyling the map underneath would only make the accent harder to
-        // read.
+        // The standard base map, left exactly as Apple draws it in whichever
+        // theme is in force. The coverage is what this screen is about and is
+        // drawn over the top; restyling the map underneath would only make it
+        // harder to read.
         map.mapType = .standard
+        apply(appearance: appearance, to: map)
         return map
+    }
+
+    /// Overriding the interface style on the map view alone themes the base
+    /// map without dragging the rest of the app dark with it, and the dynamic
+    /// overlay colours resolve against the override rather than the system.
+    private func apply(appearance: MapAppearance, to map: MKMapView) {
+        let style: UIUserInterfaceStyle
+        switch appearance {
+        case .system: style = .unspecified
+        case .light: style = .light
+        case .dark: style = .dark
+        }
+        guard map.overrideUserInterfaceStyle != style else { return }
+        map.overrideUserInterfaceStyle = style
+        // The overlay renderers cached their colours against the old style.
+        for overlay in map.overlays {
+            map.renderer(for: overlay)?.setNeedsDisplay()
+        }
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.onVisibleAreaChange = onVisibleAreaChange
+        apply(appearance: appearance, to: map)
         if map.showsUserLocation != showsUserLocation {
             map.showsUserLocation = showsUserLocation
         }
@@ -116,6 +150,7 @@ struct StreetMapView: UIViewRepresentable {
         private var appliedGeneration: Int?
         private var unwalkedOverlay: MKMultiPolyline?
         private var walkedOverlay: MKMultiPolyline?
+        private var walkedGlowOverlay: MKMultiPolyline?
         private var appliedFocusID: UUID?
         private var appliedFollowRequest = 0
 
@@ -129,16 +164,22 @@ struct StreetMapView: UIViewRepresentable {
             guard bundle?.generation != appliedGeneration else { return }
             appliedGeneration = bundle?.generation
 
-            let previous = [unwalkedOverlay, walkedOverlay].compactMap { $0 }
+            let previous = [unwalkedOverlay, walkedGlowOverlay, walkedOverlay].compactMap { $0 }
             unwalkedOverlay = bundle?.unwalked
+            walkedGlowOverlay = bundle?.walkedGlow
             walkedOverlay = bundle?.walked
 
             // The new overlays go on before the old ones come off, so the
             // streets do not blink out for a frame while the user is panning.
             // Both sit above roads but below labels, so street names stay
             // readable through the drawing.
+            // Order matters: unwalked, then the halo, then the bright core on
+            // top of its own glow.
             if let unwalked = bundle?.unwalked {
                 map.addOverlay(unwalked, level: .aboveRoads)
+            }
+            if let glow = bundle?.walkedGlow {
+                map.addOverlay(glow, level: .aboveRoads)
             }
             if let walked = bundle?.walked {
                 map.addOverlay(walked, level: .aboveRoads)
@@ -182,8 +223,14 @@ struct StreetMapView: UIViewRepresentable {
             // Walked streets are both the accent colour and the heavier
             // stroke, so they read first at every zoom level.
             if multi === walkedOverlay {
-                renderer.strokeColor = WalkPalette.walkedUIColor
-                renderer.lineWidth = 5.5
+                renderer.strokeColor = WalkPalette.walkedCoreUIColor
+                renderer.lineWidth = 4
+            } else if multi === walkedGlowOverlay {
+                // Roughly triple the core width. Wide enough to read as a
+                // halo, narrow enough that neighbouring streets do not bleed
+                // into one another at city zoom.
+                renderer.strokeColor = WalkPalette.walkedGlowUIColor
+                renderer.lineWidth = 13
             } else {
                 renderer.strokeColor = WalkPalette.unwalkedUIColor
                 renderer.lineWidth = 2.5

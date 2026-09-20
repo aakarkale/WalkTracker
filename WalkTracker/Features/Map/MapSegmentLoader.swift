@@ -139,9 +139,13 @@ final class MapSegmentLoader: ObservableObject {
                 }
             }
 
+            // Two MKMultiPolyline objects wrap the same MKPolyline array. The
+            // lines themselves are shared by reference, so the halo costs a
+            // wrapper rather than a second copy of the geometry.
             return StreetOverlayBundle(
                 unwalked: unwalkedLines.isEmpty ? nil : MKMultiPolyline(unwalkedLines),
                 walked: walkedLines.isEmpty ? nil : MKMultiPolyline(walkedLines),
+                walkedGlow: walkedLines.isEmpty ? nil : MKMultiPolyline(walkedLines),
                 generation: nextGeneration,
                 segmentCount: walkedLines.count + unwalkedLines.count
             )

@@ -37,6 +37,7 @@ private struct MapScreenBody: View {
             StreetMapView(
                 overlays: loader.overlays,
                 showsUserLocation: environment.hasLocationAccess,
+                appearance: environment.mapAppearance,
                 focus: focus,
                 followRequest: followRequest,
                 onVisibleAreaChange: { area in loader.visibleAreaChanged(area) }
