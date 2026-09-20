@@ -123,6 +123,22 @@ separate the two in traffic, where a bus averages walking pace.
 when Core Motion is unsure, which it often is indoors. A slow crawl in traffic
 can still be credited.
 
+## No social layer
+
+**Decision.** No feed, no accounts, no following, no leaderboards against
+other people. Sharing produces an image on the device.
+
+**Why.** The app holds a permanent, detailed record of where someone walks.
+Every social feature needs that record, or a summary of it, on a server. A
+walking-coverage feed is also uniquely revealing: unlike a run route, city
+coverage over months describes where somebody lives, works and shops.
+
+**What it costs.** The strongest growth loop those apps have. A completionist
+app with friends in it would spread faster. This is a real cost and it is
+accepted rather than overlooked. If it is ever revisited, the bar should be
+end-to-end encryption with the server unable to read coverage, not a normal
+account system.
+
 ## Open questions
 
 - **Neighbourhood boundaries.** The pack format supports districts but no
@@ -135,5 +151,8 @@ can still be credited.
   number is a guess chosen to stop GPS trimming at block ends leaving every
   street at 97% forever. It should be revisited against real traces.
 - **Battery.** Continuous GPS is expensive and the cost here is unmeasured.
-  Auto-stopping after a period without movement is the obvious mitigation and
-  is not implemented.
+  Auto-pause now drops to coarse accuracy after two minutes without movement,
+  which should help, but nobody has put a meter on it.
+- **Milestone thresholds.** The block and distance thresholds are judgement,
+  not data. Whether 10 blocks feels like an achievement or a participation
+  prize is a question for real users.

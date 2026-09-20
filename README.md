@@ -93,6 +93,35 @@ destructive. `CoverageRebuilder` does this, and it runs automatically when a
 pack version changes, because segment ids are pack-local and stale ids would
 silently credit the wrong streets.
 
+## Interface direction
+
+Light and modern, in the vein of Strava and Nike Run Club. Concretely that
+means white backgrounds with soft-shadowed cards rather than grey fills, one
+vivid accent used sparingly, and numbers as the main event: the hero figure on
+any screen is very large, rounded and monospaced-digit, with a small
+letter-spaced uppercase label beneath it.
+
+The interaction patterns borrowed from those apps are the ones that actually
+fit a coverage app rather than a pace app:
+
+- **A summary when a walk ends**, leading with new street unlocked rather than
+  distance walked. Distance is the ordinary number here; new coverage is the
+  one that means something.
+- **Milestones** at thresholds that thin out as they grow, so early ones build
+  momentum and later ones stay rare.
+- **A weekly coverage goal**, because on most days the city percentage barely
+  moves and a completionist app needs a shorter feedback loop than "0.1% of
+  Paris".
+- **Auto-pause**, which both apps do and users now expect.
+- **Route thumbnails** in the history list, drawn as lightweight paths rather
+  than map snapshots so the list stays scrollable.
+
+What was deliberately not borrowed: the social layer. No feed, no following,
+no accounts, no leaderboards against other people. Sharing is a locally
+rendered image and nothing more. That follows from the privacy position below
+rather than from a lack of ambition, and it is the one place where copying
+those apps would undermine the product.
+
 ## Privacy and security
 
 Location history is about as sensitive as personal data gets. The decisions
