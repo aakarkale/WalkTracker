@@ -65,10 +65,12 @@ private struct MapScreenBody: View {
                 .padding(.bottom, 12)
                 .background(bottomFade)
             }
-        }
-        .sheet(isPresented: $showingCities) {
-            NavigationStack {
-                CityListScreen()
+            // The two sheets are attached to different views on purpose: two
+            // sheet modifiers on the same view do not reliably both work.
+            .sheet(isPresented: $showingCities) {
+                NavigationStack {
+                    CityListScreen()
+                }
             }
         }
         .sheet(item: $environment.pendingSummary) { summary in
