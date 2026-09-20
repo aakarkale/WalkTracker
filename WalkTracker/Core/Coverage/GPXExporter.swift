@@ -42,7 +42,7 @@ public struct GPXExporter {
             for point in points {
                 try write(handle, """
                       <trkpt lat="\(Self.coordinate(point.coordinate.latitude))" lon="\(Self.coordinate(point.coordinate.longitude))">
-                        <ele>\(String(format: "%.1f", point.altitude))</ele>
+                        <ele>\(Self.number(point.altitude, decimals: 1))</ele>
                         <time>\(Self.timestamp.string(from: point.timestamp))</time>
                       </trkpt>\n
                 """)
@@ -93,7 +93,16 @@ public struct GPXExporter {
     /// POSIX locale keeps a device set to a comma decimal separator from
     /// writing coordinates no other tool can read.
     private static func coordinate(_ value: Double) -> String {
-        String(format: "%.7f", locale: Locale(identifier: "en_US_POSIX"), value)
+        number(value, decimals: 7)
+    }
+
+    private static let posix = Locale(identifier: "en_US_POSIX")
+
+    /// Every number written into the document uses the POSIX locale. GPX
+    /// readers expect a period as the decimal separator, so a device set to a
+    /// comma locale would otherwise produce a file nothing else can parse.
+    private static func number(_ value: Double, decimals: Int) -> String {
+        String(format: "%.\(decimals)f", locale: posix, value)
     }
 
     /// Escapes text for XML.

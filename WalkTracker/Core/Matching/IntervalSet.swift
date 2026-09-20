@@ -154,7 +154,16 @@ extension IntervalSet {
         self.init(intervals: parsed)
     }
 
+    /// Formatted with the POSIX locale explicitly.
+    ///
+    /// These strings are persisted and parsed back with `Double(_:)`, which
+    /// only accepts a period as the decimal separator. On a device set to a
+    /// locale that uses a comma, an implicitly localised format would write
+    /// "0,50000" and every coverage row would silently fail to parse on the
+    /// next read.
+    private static let posix = Locale(identifier: "en_US_POSIX")
+
     private static func format(_ value: Double) -> String {
-        String(format: "%.5f", value)
+        String(format: "%.5f", locale: posix, value)
     }
 }
