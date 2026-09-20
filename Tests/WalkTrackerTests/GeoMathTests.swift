@@ -58,13 +58,28 @@ final class GeoMathTests: XCTestCase {
     }
 
     func testHaversineOneDegreeOfLongitudeShrinksWithLatitude() {
-        // cos(60 degrees) is exactly 0.5, so a degree of longitude at 60 N is
-        // half the equatorial one.
         let atSixty = GeoMath.haversine(
             Coordinate(latitude: 60, longitude: 0),
             Coordinate(latitude: 60, longitude: 1)
         )
-        XCTAssertEqual(atSixty, metresPerDegree / 2, accuracy: 0.5)
+
+        // Because cos(60 degrees) is exactly 0.5, a degree of longitude
+        // measured ALONG the parallel at 60 N is half the equatorial one.
+        let alongTheParallel = metresPerDegree / 2
+
+        // But haversine does not measure along the parallel. Two points at the
+        // same latitude are not joined by their line of latitude: the shortest
+        // path between them is a great circle, which bows toward the pole and
+        // is therefore slightly shorter. At 60 N over one degree the
+        // difference is about 53 cm, which is small but real, and an earlier
+        // version of this test asserted the parallel distance with a half
+        // metre tolerance and failed by 3 cm.
+        XCTAssertLessThan(atSixty, alongTheParallel)
+        XCTAssertEqual(alongTheParallel - atSixty, 0.529, accuracy: 0.01)
+
+        // The headline claim still holds: it is half the equatorial degree to
+        // within a metre in 55 kilometres.
+        XCTAssertEqual(atSixty, alongTheParallel, accuracy: 1.0)
     }
 
     func testHaversineHalfwayAroundTheEquator() {

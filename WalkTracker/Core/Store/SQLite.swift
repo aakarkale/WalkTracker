@@ -144,12 +144,58 @@ public final class SQLiteDatabase {
 
     /// Folds the write-ahead log back into the main database file.
     ///
-    /// Required before copying the file for a backup. Without it the most
-    /// recent writes are still sitting in the sidecar log, and the copy is
-    /// silently stale: the user would back up their walks and find the last
-    /// few missing.
+    /// The result is checked rather than discarded. `wal_checkpoint` returns a
+    /// row whose first column is a busy flag, and a busy checkpoint copies
+    /// nothing while still reporting success to `sqlite3_exec`. Ignoring it is
+    /// how a backup silently loses the most recent writes.
     public func checkpoint() throws {
-        try execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        let rows = try query("PRAGMA wal_checkpoint(TRUNCATE)") { row in
+            (busy: row.int(0), log: row.int(1), copied: row.int(2))
+        }
+        if let result = rows.first, result.busy != 0 {
+            throw Error.stepFailed(
+                "write-ahead log checkpoint could not complete: another connection is holding it"
+            )
+        }
+    }
+
+    /// Writes a consistent snapshot of this database to `path`.
+    ///
+    /// Uses SQLite's own backup API rather than copying the file. Copying is
+    /// only correct when the write-ahead log happens to be fully checkpointed
+    /// and nothing is mid-write, and when it is wrong it produces a file that
+    /// opens cleanly and is quietly missing the newest data. The backup API
+    /// takes a proper snapshot with no such window.
+    public func backup(toPath path: String) throws {
+        try queue.sync {
+            guard let source = handle else { throw Error.stepFailed("database is closed") }
+
+            var destinationHandle: OpaquePointer?
+            let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX
+            guard sqlite3_open_v2(path, &destinationHandle, flags, nil) == SQLITE_OK,
+                  let destination = destinationHandle else {
+                if let destinationHandle { sqlite3_close_v2(destinationHandle) }
+                throw Error.openFailed("could not create the backup destination at \(path)")
+            }
+            defer { sqlite3_close_v2(destination) }
+
+            guard let backup = sqlite3_backup_init(destination, "main", source, "main") else {
+                throw Error.stepFailed(String(cString: sqlite3_errmsg(destination)))
+            }
+
+            // -1 copies every remaining page in a single step, which is what
+            // is wanted here: the queue already holds the connection, so there
+            // is nothing to yield to.
+            let stepped = sqlite3_backup_step(backup, -1)
+            let finished = sqlite3_backup_finish(backup)
+
+            guard stepped == SQLITE_DONE else {
+                throw Error.stepFailed("backup did not complete: code \(stepped)")
+            }
+            guard finished == SQLITE_OK else {
+                throw Error.stepFailed(String(cString: sqlite3_errmsg(destination)))
+            }
+        }
     }
 
     public func lastInsertRowID() -> Int64 {

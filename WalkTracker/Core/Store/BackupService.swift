@@ -75,9 +75,21 @@ public final class BackupService {
             """,
             [.text(Self.createdAtKey), .text(ISO8601DateFormatter().string(from: Date()))]
         )
-        try database.database.checkpoint()
+        // Snapshotted through SQLite's backup API rather than copied off
+        // disk. A raw copy is only correct when the write-ahead log happens to
+        // be fully checkpointed and nothing is mid-write, and when it is wrong
+        // it produces a file that opens cleanly and is quietly missing the
+        // newest walks, which is the exact failure a backup exists to prevent.
+        let snapshot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("walktracker-snapshot-\(UUID().uuidString).sqlite")
+        defer {
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(atPath: snapshot.path + suffix)
+            }
+        }
+        try database.database.backup(toPath: snapshot.path)
 
-        let raw = try Data(contentsOf: database.fileURL, options: .mappedIfSafe)
+        let raw = try Data(contentsOf: snapshot, options: .mappedIfSafe)
         let compressed = try GzipEncoder.compress(raw)
 
         let folder = directory ?? FileManager.default.temporaryDirectory
@@ -200,8 +212,16 @@ public final class BackupService {
             }
             try manager.moveItem(at: staging, to: destination)
 
-            // Prove it opens before the old copy is thrown away.
-            _ = try SQLiteDatabase(path: destination.path, readOnly: true)
+            // Prove it is a database before the old copy is thrown away, by
+            // reading from it. Merely opening proves nothing: SQLite opens
+            // lazily and does not look at the header until a statement runs,
+            // so a file of arbitrary bytes opens without complaint and only
+            // fails later, once the original is gone.
+            let candidate = try SQLiteDatabase(path: destination.path, readOnly: true)
+            let tables = try candidate.query("SELECT count(*) FROM sqlite_master") { Int($0.int(0)) }
+            guard let count = tables.first, count > 0 else {
+                throw BackupError.notABackup
+            }
 
             if movedAside { try? manager.removeItem(at: rollback) }
         } catch {
