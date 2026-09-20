@@ -123,10 +123,10 @@ struct PillButtonStyle: ButtonStyle {
     var tint: Color = WalkPalette.accent
 
     func makeBody(configuration: Configuration) -> some View {
-        Body(configuration: configuration, filled: filled, tint: tint)
+        StyleBody(configuration: configuration, filled: filled, tint: tint)
     }
 
-    private struct Body: View {
+    private struct StyleBody: View {
 
         let configuration: PillButtonStyle.Configuration
         let filled: Bool
@@ -164,10 +164,10 @@ struct SmallPillButtonStyle: ButtonStyle {
     var tint: Color = WalkPalette.accent
 
     func makeBody(configuration: Configuration) -> some View {
-        Body(configuration: configuration, filled: filled, tint: tint)
+        StyleBody(configuration: configuration, filled: filled, tint: tint)
     }
 
-    private struct Body: View {
+    private struct StyleBody: View {
 
         let configuration: SmallPillButtonStyle.Configuration
         let filled: Bool

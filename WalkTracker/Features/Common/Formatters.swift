@@ -123,11 +123,6 @@ enum WalkFormat {
         return String(localized: "\(done) / \(all) blocks")
     }
 
-    static func blockCount(_ count: Int) -> String {
-        let value = count.formatted()
-        return String(localized: "\(value) blocks")
-    }
-
     static func downloadSize(bytes: Int64) -> String {
         bytes.formatted(.byteCount(style: .file))
     }

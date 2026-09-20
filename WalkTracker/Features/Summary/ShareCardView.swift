@@ -15,19 +15,19 @@ struct ShareCardView: View {
 
     /// The exported image is always light, whatever theme the phone is in: a
     /// dynamic colour would render a black square for a user in dark mode.
-    private let paper = Color(red: 0.985, green: 0.980, blue: 0.976)
-    private let ink = Color(red: 0.11, green: 0.11, blue: 0.12)
-    private let accent = Color(red: 0.96, green: 0.33, blue: 0.10)
+    private static let paper = Color(red: 0.985, green: 0.980, blue: 0.976)
+    private static let ink = Color(red: 0.11, green: 0.11, blue: 0.12)
+    private static let accent = Color(red: 0.204, green: 0.780, blue: 0.349)
 
     static let side: CGFloat = 600
 
     var body: some View {
         ZStack {
-            paper
+            Self.paper
 
             VStack(spacing: 0) {
                 MultiRouteShape(runs: runs)
-                    .stroke(accent, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                    .stroke(Self.accent, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
                     .frame(width: Self.side - 120, height: Self.side - 230)
                     .padding(.top, 50)
 
@@ -36,7 +36,7 @@ struct ShareCardView: View {
                 Text(percentageText)
                     .font(.system(size: 92, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(ink)
+                    .foregroundStyle(Self.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
 
@@ -44,7 +44,7 @@ struct ShareCardView: View {
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .textCase(.uppercase)
                     .kerning(2)
-                    .foregroundStyle(accent)
+                    .foregroundStyle(Self.accent)
                     .padding(.top, 6)
                     .padding(.bottom, 44)
                     .lineLimit(1)

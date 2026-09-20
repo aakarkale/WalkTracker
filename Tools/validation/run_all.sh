@@ -78,6 +78,7 @@ PY
 
 run "Interval merging" python3 Tools/validation/interval_ref.py
 run "Pack geometry codec" python3 Tools/validation/geom_codec.py
+run "Gzip encode and decode" python3 Tools/validation/gzip_ref.py
 run "City pack pipeline" python3 Tools/citypack/test_pipeline.py
 run "GPX import rules" python3 Tools/validation/gpx_ref.py
 run "Map matching accuracy" python3 Tools/validation/final_eval.py

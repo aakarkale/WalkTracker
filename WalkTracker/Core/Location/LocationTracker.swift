@@ -19,10 +19,12 @@ public extension LocationTrackerDelegate {
 ///
 /// Two deliberate choices worth stating, because both trade something away:
 ///
-/// The background location indicator is left **on**. It could be hidden, but
-/// an app that records where someone walks should be visibly recording. The
-/// blue bar is the honest signal, and hiding it would be the wrong default
-/// whatever App Review permits.
+/// The background location indicator defaults to **on**. An app that records
+/// where someone walks should be visibly recording, and the blue bar is the
+/// honest signal. It is a preference rather than a hard rule because the
+/// person whose phone it is may have their own reasons for not wanting a
+/// permanent badge announcing it, and overriding that is paternalism rather
+/// than privacy. The default carries the position; the toggle respects them.
 ///
 /// Motion activity gates whether fixes count. Riding a bus down a street is
 /// not walking it, and speed alone cannot tell the two apart reliably in
@@ -39,6 +41,16 @@ public final class LocationTracker: NSObject {
 
     public private(set) var isTracking = false
     public private(set) var isWatchingSignificantChanges = false
+
+    /// Whether iOS shows the blue recording indicator during a walk.
+    ///
+    /// Defaults to true. Changing it mid-walk takes effect immediately.
+    public var showsRecordingIndicator = true {
+        didSet {
+            guard isTracking, manager.authorizationStatus == .authorizedAlways else { return }
+            manager.showsBackgroundLocationIndicator = showsRecordingIndicator
+        }
+    }
     /// Latest motion classification. Nil when Core Motion is unavailable or
     /// permission was refused, in which case tracking proceeds without the gate.
     public private(set) var currentActivity: CMMotionActivity?
@@ -99,7 +111,7 @@ public final class LocationTracker: NSObject {
         // declared. Setting it under "When In Use" throws.
         if status == .authorizedAlways {
             manager.allowsBackgroundLocationUpdates = true
-            manager.showsBackgroundLocationIndicator = true
+            manager.showsBackgroundLocationIndicator = showsRecordingIndicator
         }
 
         isTracking = true

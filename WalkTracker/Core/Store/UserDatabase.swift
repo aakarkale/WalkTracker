@@ -113,6 +113,11 @@ public final class UserDatabase {
         """
     ]
 
+    /// Highest schema version this build understands. A backup claiming more
+    /// than this was written by a newer app and is refused rather than opened
+    /// on a guess.
+    public static var currentSchemaVersion: Int { migrations.count }
+
     private func migrate() throws {
         let current = try database.query("PRAGMA user_version") { Int($0.int(0)) }.first ?? 0
         guard current < Self.migrations.count else { return }

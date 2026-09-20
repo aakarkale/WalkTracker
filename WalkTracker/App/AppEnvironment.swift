@@ -712,7 +712,10 @@ final class AppEnvironment: ObservableObject {
                 completedBlocks: stats.completedBlocks,
                 totalBlocks: stats.totalBlocks,
                 walkedMetres: stats.walkedMetres,
-                cityFraction: stats.fraction,
+                // Block based, matching the headline percentage: a milestone
+                // must fire at the same moment the number the user is watching
+                // crosses the threshold.
+                cityFraction: stats.blockFraction,
                 completedDistricts: completedDistricts,
                 walkCount: walkCount
             )
