@@ -23,6 +23,7 @@
 //  updated to check the shape of the descriptor rather than deleted.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 

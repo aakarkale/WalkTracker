@@ -17,6 +17,7 @@
 //  (see GeoMathTests), which is why the tolerances here are so tight.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 

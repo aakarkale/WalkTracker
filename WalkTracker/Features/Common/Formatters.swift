@@ -44,6 +44,18 @@ enum WalkFormat {
         return String(localized: "\(value) mi")
     }
 
+    /// The distance unit the locale wants, for a chart axis label where the
+    /// unit belongs in the header rather than on every value.
+    static var distanceUnitLabel: String {
+        usesMetricDistance ? String(localized: "km") : String(localized: "mi")
+    }
+
+    /// A metre value converted into the locale's unit, unformatted, for
+    /// plotting.
+    static func distanceValue(metres: Double) -> Double {
+        usesMetricDistance ? metres / 1_000 : metres / 1_609.344
+    }
+
     // MARK: - Duration
 
     /// A running clock for the walk in progress, such as 12:04 or 1:12:04.

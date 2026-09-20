@@ -24,6 +24,7 @@
 //  round trip test against it when the first real pack exists.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 
@@ -73,8 +74,8 @@ final class GzipDecoderTests: XCTestCase {
 
     private func assertThrows(
         _ data: Data,
-        expectedSize: Int? = nil,
         _ description: String,
+        expectedSize: Int? = nil,
         matches: (GzipDecoder.Error) -> Bool,
         file: StaticString = #filePath,
         line: UInt = #line
@@ -236,7 +237,7 @@ final class GzipDecoderTests: XCTestCase {
     func testExpectedSizeBoundsTheOutput() {
         // A decompression bomb is a few kilobytes that expand to gigabytes.
         // The declared size from the catalog caps the allocation.
-        assertThrows(validArchive, expectedSize: 1, "output beyond the declared size") { error in
+        assertThrows(validArchive, "output beyond the declared size", expectedSize: 1) { error in
             if case .tooLarge = error { return true }
             return false
         }

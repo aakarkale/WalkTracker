@@ -18,6 +18,7 @@
 //  tests use values that are exact at five places.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 

@@ -26,6 +26,7 @@
 //  distances in the fixtures below are literally metres.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 
@@ -147,10 +148,10 @@ final class MapMatcherTests: XCTestCase {
     }
 
     private func totalCoverage(in claims: [CoverageClaim]) -> Double {
-        Set(claims.map(\.segmentID)).reduce(0) { $0 + coverage(ofSegment: $1, in: claims) }
+        Set(claims.map(\.segmentID)).reduce(0.0) { $0 + coverage(ofSegment: $1, in: claims) }
     }
 
-    private func run(_ points: [TrackPoint], through matcher: MapMatcher) -> [CoverageClaim] {
+    private func matchAll(_ points: [TrackPoint], through matcher: MapMatcher) -> [CoverageClaim] {
         var claims: [CoverageClaim] = []
         for point in points {
             claims.append(contentsOf: matcher.ingest(point))
@@ -162,7 +163,7 @@ final class MapMatcherTests: XCTestCase {
 
     func testCleanWalkClaimsTheBlockItWalked() {
         let matcher = MapMatcher(index: makeGrid())
-        var claims = run(straightWalk(), through: matcher)
+        var claims = matchAll(straightWalk(), through: matcher)
         claims.append(contentsOf: matcher.flush())
 
         // The walk crosses the whole of block 2 and enters the blocks on
@@ -179,7 +180,7 @@ final class MapMatcherTests: XCTestCase {
         // worthless: painting a street the user never set foot on. The
         // parallel street is 45 m away, well inside the search radius.
         let matcher = MapMatcher(index: makeGrid())
-        var claims = run(straightWalk(), through: matcher)
+        var claims = matchAll(straightWalk(), through: matcher)
         claims.append(contentsOf: matcher.flush())
 
         for id: Int64 in [11, 12, 13, 21, 22] {
@@ -192,7 +193,7 @@ final class MapMatcherTests: XCTestCase {
 
     func testEveryClaimIsOrientedAndNonEmpty() {
         let matcher = MapMatcher(index: makeGrid())
-        var claims = run(straightWalk(), through: matcher)
+        var claims = matchAll(straightWalk(), through: matcher)
         claims.append(contentsOf: matcher.flush())
 
         XCTAssertFalse(claims.isEmpty)
@@ -209,7 +210,7 @@ final class MapMatcherTests: XCTestCase {
     func testFixesWorseThanTheAccuracyCeilingAreRejected() {
         // Default configuration drops anything above 30 m.
         let matcher = MapMatcher(index: makeGrid())
-        let claims = run(straightWalk(accuracy: 45), through: matcher)
+        let claims = matchAll(straightWalk(accuracy: 45), through: matcher)
 
         XCTAssertTrue(claims.isEmpty)
         // Nothing entered the window either, so there is no tail to flush.
@@ -221,7 +222,7 @@ final class MapMatcherTests: XCTestCase {
         configuration.maxHorizontalAccuracy = 50
 
         let matcher = MapMatcher(index: makeGrid(), configuration: configuration)
-        var claims = run(straightWalk(accuracy: 45), through: matcher)
+        var claims = matchAll(straightWalk(accuracy: 45), through: matcher)
         claims.append(contentsOf: matcher.flush())
 
         XCTAssertFalse(claims.isEmpty, "raising the ceiling should let these fixes through")
@@ -266,7 +267,7 @@ final class MapMatcherTests: XCTestCase {
     func testNegativeAccuracyIsRejected() {
         // CoreLocation uses a negative accuracy to mean "no horizontal fix".
         let matcher = MapMatcher(index: makeGrid())
-        let claims = run(straightWalk(accuracy: -1), through: matcher)
+        let claims = matchAll(straightWalk(accuracy: -1), through: matcher)
 
         XCTAssertTrue(claims.isEmpty)
         XCTAssertTrue(matcher.flush().isEmpty)
@@ -324,7 +325,7 @@ final class MapMatcherTests: XCTestCase {
 
     func testBridgingAcrossASharedIntersection() {
         let matcher = MapMatcher(index: makeTwoBlocks(sharingNode: true))
-        let duringWalk = run(twoBlockWalk(), through: matcher)
+        let duringWalk = matchAll(twoBlockWalk(), through: matcher)
         XCTAssertTrue(duringWalk.isEmpty, "two fixes should not fill the window")
 
         let claims = matcher.flush()
@@ -349,7 +350,7 @@ final class MapMatcherTests: XCTestCase {
         // so there is no known route between them and the matcher claims
         // nothing rather than inventing one.
         let matcher = MapMatcher(index: makeTwoBlocks(sharingNode: false))
-        let duringWalk = run(twoBlockWalk(), through: matcher)
+        let duringWalk = matchAll(twoBlockWalk(), through: matcher)
 
         XCTAssertTrue(duringWalk.isEmpty)
         XCTAssertTrue(matcher.flush().isEmpty)
@@ -362,7 +363,7 @@ final class MapMatcherTests: XCTestCase {
         // a substantial tail that only flush() can release. Dropping it would
         // quietly lose the last minute or two of every walk.
         let matcher = MapMatcher(index: makeGrid())
-        let duringWalk = run(straightWalk(), through: matcher)
+        let duringWalk = matchAll(straightWalk(), through: matcher)
         let tail = matcher.flush()
 
         XCTAssertFalse(tail.isEmpty)
@@ -374,7 +375,7 @@ final class MapMatcherTests: XCTestCase {
 
     func testFlushIsIdempotent() {
         let matcher = MapMatcher(index: makeGrid())
-        _ = run(straightWalk(), through: matcher)
+        _ = matchAll(straightWalk(), through: matcher)
 
         XCTAssertFalse(matcher.flush().isEmpty)
         XCTAssertTrue(matcher.flush().isEmpty, "a second flush should have nothing left to emit")
@@ -382,7 +383,7 @@ final class MapMatcherTests: XCTestCase {
 
     func testResetDiscardsTheWindow() {
         let matcher = MapMatcher(index: makeGrid())
-        _ = run(straightWalk(), through: matcher)
+        _ = matchAll(straightWalk(), through: matcher)
 
         matcher.reset()
 

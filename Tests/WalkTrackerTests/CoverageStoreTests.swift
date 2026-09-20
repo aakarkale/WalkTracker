@@ -14,6 +14,7 @@
 //  transaction, and a stub would only test the parts that were never in doubt.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 

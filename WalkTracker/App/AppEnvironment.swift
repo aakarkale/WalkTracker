@@ -88,6 +88,14 @@ struct WalkSummary: Identifiable, Sendable {
     let milestones: [Milestone]
 }
 
+/// Where a GPX import has got to.
+enum GPXImportState: Equatable {
+    case idle
+    case importing(fraction: Double)
+    case finished(WalkImportService.Result)
+    case failed(String)
+}
+
 // MARK: - Authorization
 
 /// Publishes CoreLocation's authorization status for the UI to react to.
@@ -157,6 +165,7 @@ final class AppEnvironment: ObservableObject {
     /// Bumped whenever stored coverage changes, so the map knows to reload
     /// without every view having to observe the database.
     @Published private(set) var coverageRevision = 0
+    @Published private(set) var importState: GPXImportState = .idle
     /// Set when a walk ends, cleared when the summary is dismissed.
     @Published var pendingSummary: WalkSummary?
     @Published private(set) var isPreparingSummary = false
@@ -822,6 +831,68 @@ final class AppEnvironment: ObservableObject {
                 .map { $0.geometry.coordinates }
             return RouteGeometry.normalise(runs: runs, limitPerRun: 24)
         }.value
+    }
+
+    // MARK: Import
+
+    /// Imports a GPX file into the selected city.
+    ///
+    /// Someone who has lived in their city for ten years should not open this
+    /// app and be told they have walked none of it. Their history already
+    /// exists in whatever app they were using, and this is how it gets in.
+    ///
+    /// The file comes from the document picker, so it is untrusted input.
+    /// `GPXImporter` caps its size, refuses external entities and drops
+    /// malformed points rather than failing the whole file, so the job here is
+    /// to run it off the main thread and report what happened.
+    func importGPX(from url: URL) async {
+        guard let context = packContext, let cityID = selectedCity?.id else {
+            errorMessage = String(localized: "Choose a city and download its streets before importing walks.")
+            return
+        }
+
+        importState = .importing(fraction: 0)
+
+        let services = self.services
+        let onProgress: @Sendable (Double) -> Void = { [weak self] fraction in
+            Task { @MainActor in self?.importState = .importing(fraction: fraction) }
+        }
+
+        do {
+            let result = try await Task.detached(priority: .userInitiated) { () -> WalkImportService.Result in
+                // A file chosen in the picker lives outside the app's sandbox
+                // and has to be opened through its security scope.
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+                // Mapped rather than read: a large history should not be pulled
+                // into memory twice before the size cap has even been checked.
+                let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                let tracks = try GPXImporter().tracks(from: data)
+
+                let service = WalkImportService(
+                    sessionStore: services.sessionStore,
+                    coverageStore: services.coverageStore
+                )
+                return try service.importTracks(
+                    tracks,
+                    cityID: cityID,
+                    packStore: context.store,
+                    source: .gpx,
+                    progress: onProgress
+                )
+            }.value
+
+            importState = .finished(result)
+            coverageRevision += 1
+            await refreshCityStats()
+        } catch {
+            importState = .failed(error.localizedDescription)
+        }
+    }
+
+    func clearImportState() {
+        importState = .idle
     }
 
     // MARK: Deleting data

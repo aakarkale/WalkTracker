@@ -20,6 +20,7 @@
 //  a real mistake.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 

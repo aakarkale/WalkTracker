@@ -12,6 +12,7 @@
 //  a refactor and silent when it happens.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 

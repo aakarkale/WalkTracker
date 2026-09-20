@@ -21,6 +21,7 @@
 //  there is not a rounding problem, it is the wrong street.
 //
 
+import Foundation
 import XCTest
 @testable import WalkTracker
 
