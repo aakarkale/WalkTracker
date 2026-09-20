@@ -123,6 +123,44 @@ separate the two in traffic, where a bus averages walking pace.
 when Core Motion is unsure, which it often is indoors. A slow crawl in traffic
 can still be credited.
 
+## Gate GPS on the pedometer, do not run it continuously
+
+**Decision.** Automatic tracking holds only a significant-change subscription
+until the motion coprocessor reports enough steps without a vehicle
+classification, and only then starts real positioning.
+
+**Why.** The obvious build keeps GPS running and flattens the battery. The
+reference app records walks without being opened and still costs under three
+percent of battery a day, which is only possible if the expensive hardware
+stays off until something cheap says it is worth turning on. Step counting
+runs continuously on a dedicated coprocessor for almost nothing.
+
+**What it costs.** The first stretch of a walk can be missed, because the
+gate needs about a minute of steps before it fires. Some coverage at the
+start of an automatic walk will be lost that a manual start would have
+caught, which is why the manual button stays.
+
+**Still off by default.** An app that starts recording someone's movements
+without being asked is not something to opt people into silently, however
+good the battery numbers are.
+
+## Import existing history
+
+**Decision.** GPX import, writing through the same matcher as live walks.
+
+**Why.** Someone who has lived in a city for ten years opens this app and
+sees 0%. That is discouraging and it is also false. GPX is what almost
+everything exports, so their real coverage can be filled in on day one.
+
+**Why through the same pipeline.** If imports took a shortcut, a street
+credited from an import and one walked today would mean different things and
+the percentage would stop being a single number.
+
+**Not built.** Apple Health import, which is the better source because it
+needs no file wrangling. It requires a HealthKit entitlement and usage
+strings that could not be verified in this environment, so it is a documented
+next step rather than untested code touching health data.
+
 ## No social layer
 
 **Decision.** No feed, no accounts, no following, no leaderboards against
@@ -135,9 +173,18 @@ coverage over months describes where somebody lives, works and shops.
 
 **What it costs.** The strongest growth loop those apps have. A completionist
 app with friends in it would spread faster. This is a real cost and it is
-accepted rather than overlooked. If it is ever revisited, the bar should be
-end-to-end encryption with the server unable to read coverage, not a normal
-account system.
+accepted rather than overlooked.
+
+**Worth revisiting, and here is the shape.** The reference app has a
+leaderboard and manages it without giving up much: the server sees only
+aggregate figures, total blocks and distance and walking time, never
+coordinates, and there is no sign-up or name unless the user chooses one.
+That is a genuinely privacy-preserving design and it is a better answer than
+the flat refusal recorded above. It was not built here because it needs a
+server, and standing up a backend is a decision for the product owner rather
+than something to add quietly. If it is wanted, that aggregate-only shape is
+the one to build, and the coverage statistics are already computed in a form
+that can be sent without any location data attached.
 
 ## Open questions
 
