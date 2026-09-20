@@ -40,6 +40,7 @@ The App Store privacy questionnaire asks what you collect. As the code stands:
 | Question | Answer |
 |---|---|
 | Data collected | None, in Apple's sense of the word |
+| Data the user can export | Backups and GPX, to wherever they choose |
 | Location used | Yes, precise, on device only |
 | Linked to identity | No, there is no identity |
 | Used for tracking | No |
@@ -69,7 +70,8 @@ The facts a privacy policy needs, in plain terms:
 - Deleting the app deletes everything it holds. A backup is how you avoid
   losing a year of walking.
 - The app asks for motion data to tell walking from riding, so a bus ride down
-  a street is not counted as having walked it.
+  a street is not counted as having walked it. It says on screen when it is
+  declining to count a stretch for that reason.
 - City street data is downloaded from a server, which learns which city you
   chose and nothing else.
 
@@ -107,3 +109,19 @@ Database License. Two obligations follow that are easy to miss:
 - [ ] Decide what happens when a user walks somewhere with no pack coverage,
       such as a park path OpenStreetMap does not have. Today they get no credit
       and no explanation.
+- [ ] Supply neighbourhood boundaries. The pack format carries districts and
+      the app can scope progress to them, but no source is wired up, so
+      `districts()` returns nothing and both the breakdown and the district
+      picker stay hidden. OpenStreetMap administrative relations are the
+      obvious candidate and vary a lot in quality between cities.
+- [ ] Test a restore on a device. The backup path is covered by unit tests but
+      has never run against a real iOS file provider, and restoring is the one
+      operation that can destroy a user's data if it goes wrong.
+- [ ] Decide about Apple Health import. It is the better source than GPX
+      because there is no file wrangling, and the reference app leads with it.
+      It needs a HealthKit entitlement and usage strings that could not be
+      verified here.
+- [ ] Decide about the leaderboard. It needs a server. If you want one, the
+      reference app's shape is the one to copy: the server sees aggregate
+      figures only, never coordinates, with no sign-up and no name unless the
+      user picks one.
