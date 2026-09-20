@@ -18,7 +18,8 @@ database.
 ## Tables
 
 ### `meta`
-Single-row key/value table describing the pack.
+Key/value table describing the pack: one row per key, two columns,
+`key TEXT PRIMARY KEY` and `value TEXT`.
 
 | key | meaning |
 |---|---|
@@ -27,8 +28,8 @@ Single-row key/value table describing the pack.
 | `city_name` | display name |
 | `built_at` | ISO 8601 build timestamp |
 | `osm_extract` | source extract and its date, for attribution |
-| `segment_count` | number of rows in `segment` |
-| `total_length_m` | sum of `length_m` over default-included classes |
+| `segment_count` | number of rows in `segment`, including optional classes |
+| `total_length_m` | sum of `length_m` over default-included classes only, so it deliberately does not cover every row counted by `segment_count` |
 | `min_lat` / `min_lon` / `max_lat` / `max_lon` | pack boundary |
 
 ### `segment`

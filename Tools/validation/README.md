@@ -26,6 +26,17 @@ python3 final_eval.py       # map matching against simulated walks
 python3 sweep.py            # compares matcher variants (slow, a few minutes)
 ```
 
+`e2e_pack.py` needs a pack to read. Build one first:
+
+```
+cd Tools/citypack
+python3 make_fixture.py --rows 20 --cols 20 --spacing 80 \
+    --out grid.osm --districts-out grid-districts.geojson
+python3 build_pack.py grid.osm --city-id testville --city-name Testville \
+    --districts grid-districts.geojson --out-dir .
+cd ../validation && python3 e2e_pack.py   # expects the pack beside it
+```
+
 ## What each covers
 
 | File | Covers | Swift it mirrors |
@@ -37,6 +48,7 @@ python3 sweep.py            # compares matcher variants (slow, a few minutes)
 | `sim.py` | Synthetic grid city and walk simulator | test fixture |
 | `final_eval.py` | Precision and recall of the chosen configuration | end to end |
 | `sweep.py` | The variant comparison the configuration was chosen from | tuning record |
+| `e2e_pack.py` | A real built pack read by the decoder and walked by the matcher | pipeline to app |
 
 ## Results as of the last run
 
@@ -64,6 +76,36 @@ from it are worth keeping:
   noisy fixes, so GPS noise alone implied 20 m/s and reset the matching chain
   on almost every fix. Recall was 2%. The gate now budgets for the reported
   accuracy of both fixes.
+
+## End to end against a real pack
+
+`e2e_pack.py` closes the loop between the two halves of the project: it takes a
+pack built by `Tools/citypack`, reads it with a port of the Swift decoder,
+walks the resulting street graph, and scores the coverage. This is what proves
+the pipeline's output and the app's reader actually agree, rather than each
+being correct against the spec in isolation.
+
+On a 20 by 20 grid with 80 m blocks, 765 blocks and 56.4 km:
+
+| Check | Result |
+|---|---|
+| Blocks decoded | 765 of 765, none rejected |
+| Length agreement | Worst 30.8 mm against a 55.8 mm quantisation bound |
+| Precision at 10 m noise | 1.000 |
+| Precision at 20 m noise | 0.997 |
+| Recall | 0.999 |
+| Compressed size | 22 KB, about 29 bytes per block |
+
+The length figures cannot be exact and should not be. Geometry is stored as
+fixed point at 1e-7 degrees, so each vertex can shift about 1.4 cm and a
+polyline accumulates that per vertex. The test's tolerance is that bound
+rather than an arbitrary epsilon, so a real defect would still fail it. The
+residual is three orders of magnitude below GPS accuracy.
+
+The size figure is the only measurement of pack size anywhere in this project.
+At roughly 29 bytes per block, a city with 50,000 blocks would be about 1.5 MB
+compressed. That is a synthetic grid with short names and no districts, so
+treat it as a lower bound rather than a forecast.
 
 ## Caveats
 

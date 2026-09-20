@@ -36,7 +36,7 @@ import shutil
 import sqlite3
 import struct
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import osm
@@ -717,9 +717,11 @@ def build_segments(
                 counters.segments_dropped_short += 1
                 continue
 
-            try:
-                encode_geometry(points)
-            except GeometryTooLong:
+            if len(points) > MAX_GEOMETRY_POINTS:
+                # The blob header counts points in a uint16. Nothing between
+                # two real intersections comes close, but a mis-tagged way
+                # that never gets split could, and silently truncating it
+                # would ship a street that stops in mid air.
                 counters.segments_dropped_oversize += 1
                 continue
 
