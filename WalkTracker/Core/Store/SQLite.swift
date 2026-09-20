@@ -215,17 +215,7 @@ public final class SQLiteDatabase {
             return output
         }
 
-        /// Folds the write-ahead log back into the main database file.
-    ///
-    /// Required before copying the file for a backup. Without it the most
-    /// recent writes are still sitting in the sidecar log, and the copy is
-    /// silently stale: the user would back up their walks and find the last
-    /// few missing.
-    public func checkpoint() throws {
-        try execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    }
-
-    public func lastInsertRowID() -> Int64 {
+        public func lastInsertRowID() -> Int64 {
             database.handle.map { sqlite3_last_insert_rowid($0) } ?? 0
         }
     }

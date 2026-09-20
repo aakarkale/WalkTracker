@@ -41,6 +41,7 @@ private struct SettingsContent: View {
                 automaticTrackingCard
                 importCard
                 percentageCard
+                mapCard
                 districtScopeCard
                 feedbackCard
                 backupCard
@@ -311,9 +312,9 @@ private struct SettingsContent: View {
         .accessibilityAddTraits(isOn ? [.isSelected, .isButton] : .isButton)
     }
 
-    // MARK: - Feedback
+    // MARK: - Map
 
-    private var feedbackCard: some View {
+    private var mapCard: some View {
         SettingsCard(title: String(localized: "Map")) {
             Picker(
                 String(localized: "Appearance"),
@@ -328,7 +329,11 @@ private struct SettingsContent: View {
 
             SettingsNote(text: String(localized: "The dark map draws walked streets as bright green over a near black background. It is independent of the rest of the app, so you can have one without the other."))
         }
+    }
 
+    // MARK: - Feedback
+
+    private var feedbackCard: some View {
         SettingsCard(title: String(localized: "Feedback")) {
             Toggle(isOn: $environment.hapticsEnabled) {
                 VStack(alignment: .leading, spacing: 4) {
