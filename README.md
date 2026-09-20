@@ -39,7 +39,12 @@ since the Swift could not be run.
 | Interval merging | Line-for-line Python port, unit cases plus 2000-trial fuzz | Disjoint invariant held, coverage correct |
 | Map matching | Python port, simulated walks on an 80 m grid with realistic GPS noise | Precision 0.994 to 1.000, recall 0.997 at 5 to 25 m noise |
 | Gzip framing | Header parser checked against real gzip files and 8 malformed inputs | Correct, no crashes |
+| GPX parsing | Namespaced and bare GPX, gap splitting, 5 kinds of malformed point | Correct, nothing fatal |
+| Pack pipeline | 29 checks on splitting, byte layout, connectivity, malformed input | All pass |
+| Pipeline to app | A built pack read by a port of the app's decoder, then walked | 765 of 765 blocks, precision 0.997 |
 | Everything else | Not executed | Unverified |
+
+Run it all with `Tools/validation/run_all.sh`.
 
 The matching numbers are from simulation, not from a real walk with a real
 phone. Treat them as evidence the algorithm is sound, not as field results.
@@ -97,9 +102,14 @@ silently credit the wrong streets.
 
 Light and modern, in the vein of Strava and Nike Run Club. Concretely that
 means white backgrounds with soft-shadowed cards rather than grey fills, one
-vivid accent used sparingly, and numbers as the main event: the hero figure on
-any screen is very large, rounded and monospaced-digit, with a small
+vivid green accent used sparingly, and numbers as the main event: the hero
+figure on any screen is very large, rounded and monospaced-digit, with a small
 letter-spaced uppercase label beneath it.
+
+Green rather than the warmer accent those two apps use, because on a coverage
+map green reads as "done" instantly and nothing else does. It stays inside the
+Nike Run Club family rather than departing from it, and it matches the
+reference app.
 
 The interaction patterns borrowed from those apps are the ones that actually
 fit a coverage app rather than a pace app:
@@ -113,6 +123,11 @@ fit a coverage app rather than a pace app:
   moves and a completionist app needs a shorter feedback loop than "0.1% of
   Paris".
 - **Auto-pause**, which both apps do and users now expect.
+- **Automatic recording**, gated on the pedometer rather than on GPS, so the
+  app can notice a walk without being opened and without flattening the
+  battery. Off until switched on.
+- **Import of existing history** from GPX, which is what Strava, Google
+  Timeline and most other tools export.
 - **Route thumbnails** in the history list, drawn as lightweight paths rather
   than map snapshots so the list stays scrollable.
 
@@ -148,6 +163,15 @@ that follow from that:
   bounds-checked.
 - **The background location indicator stays on.** It could be hidden. An app
   that records where you walk should be visibly recording.
+
+## Measured, for once
+
+The only pack ever built here is a synthetic 20 by 20 grid, 765 blocks and
+56 km, which compressed to 22 KB. That is about 29 bytes per block. A city
+with 50,000 blocks would be roughly 1.5 MB. Treat it as a lower bound: the
+fixture has short street names and no districts.
+
+Everything else about performance, battery above all, is unmeasured.
 
 ## The twenty cities
 
