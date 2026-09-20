@@ -8,7 +8,9 @@ percentage means something. Walk half of Bleecker Street and half of it counts.
 - **Record a walk** by hand, or let the app start one itself when it notices
   you walking. Automatic recording is off until you turn it on.
 - **Watch the map fill in** as blocks turn from grey to green, with the count
-  and the percentage always on screen.
+  and the percentage always on screen. On the dark map the walked streets are
+  drawn as a bright neon line over a faint halo, which is the best-looking
+  thing the app does; the theme is its own setting, not tied to the system.
 - **See what a walk earned** the moment it ends: new street unlocked, not just
   distance covered.
 - **Import what you have already walked** from GPX, so ten years in a city

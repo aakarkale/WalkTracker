@@ -114,9 +114,15 @@ Database License. Two obligations follow that are easy to miss:
       `districts()` returns nothing and both the breakdown and the district
       picker stay hidden. OpenStreetMap administrative relations are the
       obvious candidate and vary a lot in quality between cities.
-- [ ] Test a restore on a device. The backup path is covered by unit tests but
-      has never run against a real iOS file provider, and restoring is the one
-      operation that can destroy a user's data if it goes wrong.
+- [ ] Test a restore on a device, and read `AppLaunch.restore` before you do.
+      SQLite holds the database file open, so the app has to release the whole
+      environment before the file can be swapped. It does that by moving to a
+      restoring phase and waiting a fixed interval for SwiftUI to tear down
+      the views still holding it. On a slow or loaded device that window could
+      be too short, and the swap would happen under a live connection. Core
+      keeps the old database aside so the failure is recoverable, but this is
+      the one place in the app worth testing on hardware rather than reading.
+      A deterministic handshake would be better than a timed wait.
 - [ ] Decide about Apple Health import. It is the better source than GPX
       because there is no file wrangling, and the reference app leads with it.
       It needs a HealthKit entitlement and usage strings that could not be
