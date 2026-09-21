@@ -153,6 +153,11 @@ final class BackupServiceTests: XCTestCase {
         let raised = try SQLiteDatabase(path: future.path, readOnly: false)
         try raised.execute("PRAGMA user_version = \(UserDatabase.currentSchemaVersion + 5)")
         try raised.checkpoint()
+        // Put it back to a rollback journal mode. Opening read-write switched
+        // the file into write-ahead logging, and inspect opens read-only, so
+        // without this the file is unreadable rather than merely out of date
+        // and the test would pass for the wrong reason.
+        try raised.execute("PRAGMA journal_mode = DELETE")
 
         XCTAssertThrowsError(try service.inspect(fileAt: future)) { error in
             guard case BackupService.BackupError.unsupportedSchema = error else {

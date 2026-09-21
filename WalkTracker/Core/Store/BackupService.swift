@@ -25,6 +25,7 @@ public final class BackupService {
 
     public enum BackupError: Error, LocalizedError {
         case notABackup
+        case unreadable(String)
         case unsupportedSchema(Int)
         case tooLarge(limit: Int)
         case restoreFailed(String)
@@ -33,6 +34,8 @@ public final class BackupService {
             switch self {
             case .notABackup:
                 return "That file is not a WalkTracker backup."
+            case .unreadable(let reason):
+                return "That backup could not be read: \(reason)"
             case .unsupportedSchema(let version):
                 return "That backup was made by a newer version of the app (format \(version))."
             case .tooLarge(let limit):
@@ -145,10 +148,19 @@ public final class BackupService {
         // trusted enough to be given a writable connection.
         let candidate = try SQLiteDatabase(path: staging.path, readOnly: true)
 
-        let marker = (try? candidate.query(
-            "SELECT value FROM app_meta WHERE key = ?",
-            [.text(Self.markerKey)]
-        ) { $0.string(0) })?.first ?? nil
+        // Read failures are reported as themselves rather than folded into
+        // "not a backup". Those are different problems with different
+        // remedies, and masking one as the other is exactly what turned a
+        // journal-mode bug into two rounds of misleading diagnostics.
+        let marker: String?
+        do {
+            marker = try candidate.query(
+                "SELECT value FROM app_meta WHERE key = ?",
+                [.text(Self.markerKey)]
+            ) { $0.string(0) }.first ?? nil
+        } catch {
+            throw BackupError.unreadable(error.localizedDescription)
+        }
         guard marker == Self.markerValue else { throw BackupError.notABackup }
 
         let schemaVersion = (try? candidate.query("PRAGMA user_version") { Int($0.int(0)) })?.first ?? 0
