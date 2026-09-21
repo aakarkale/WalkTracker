@@ -119,7 +119,15 @@ final class BackupServiceTests: XCTestCase {
     /// choosing from a file browser. It has no marker, so it is refused.
     func testPlainDatabaseWithoutTheMarkerIsRefused() throws {
         let other = directory.appendingPathComponent("other.sqlite")
-        _ = try UserDatabase(fileURL: other)
+        let plain = try UserDatabase(fileURL: other)
+
+        // The case under test is a file that reads perfectly well and simply
+        // has no marker. Left in write-ahead logging it is not readable
+        // read-only at all, and this test used to pass on that error instead,
+        // which is to say it passed without testing anything. It only showed
+        // up once inspect stopped reporting every read failure as "not a
+        // backup".
+        try plain.database.execute("PRAGMA journal_mode = DELETE")
 
         XCTAssertThrowsError(try service.inspect(fileAt: other)) { error in
             guard case BackupService.BackupError.notABackup = error else {
