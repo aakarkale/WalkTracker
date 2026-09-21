@@ -12,6 +12,8 @@ public final class CityPackDownloader: NSObject {
 
     public enum DownloadError: Error, LocalizedError {
         case noPackAvailable(cityName: String)
+        case localPackUnreadable(String)
+        case localPackForDifferentCity(found: String)
         case insecureBaseURL
         case invalidURL
         case httpStatus(Int)
@@ -23,6 +25,10 @@ public final class CityPackDownloader: NSObject {
             switch self {
             case .noPackAvailable(let cityName):
                 return "Street data for \(cityName) has not been published yet."
+            case .localPackUnreadable(let reason):
+                return "That file could not be read as a city pack: \(reason)"
+            case .localPackForDifferentCity(let found):
+                return "That pack contains street data for \(found)."
             case .insecureBaseURL:
                 return "City packs can only be downloaded over HTTPS."
             case .invalidURL:
@@ -150,16 +156,31 @@ public final class CityPackDownloader: NSObject {
 
     // MARK: - Filesystem
 
-    /// Where a city's pack lives once installed, or nil when the city has no
-    /// pack published. Nil rather than a guessed filename: a path built from a
-    /// version that does not exist would silently never match anything on disk.
+    /// Where a city's pack lives once installed, or nil when there is none.
+    ///
+    /// A side-loaded pack wins over a published one. Someone who has gone to
+    /// the trouble of building a pack and choosing the file means to use it,
+    /// and it is usually newer than whatever is published.
     public func installedURL(for city: City) -> URL? {
+        let local = localURL(cityID: city.id)
+        if FileManager.default.fileExists(atPath: local.path) { return local }
         guard let pack = city.pack else { return nil }
         return installedURL(cityID: city.id, version: pack.version)
     }
 
     private func installedURL(cityID: String, version: Int) -> URL {
         packsDirectory.appendingPathComponent("\(cityID).v\(version).sqlite")
+    }
+
+    /// Side-loaded packs get their own filename, so a glance at the directory
+    /// says which packs were verified against a published digest and which
+    /// were taken on the user's word.
+    private func localURL(cityID: String) -> URL {
+        packsDirectory.appendingPathComponent("\(cityID).local.sqlite")
+    }
+
+    public func hasLocalPack(_ city: City) -> Bool {
+        FileManager.default.fileExists(atPath: localURL(cityID: city.id).path)
     }
 
     public func isInstalled(_ city: City) -> Bool {
@@ -205,10 +226,102 @@ public final class CityPackDownloader: NSObject {
     /// Removes an installed pack. The user's walk history is untouched: it
     /// lives in a different database entirely.
     public func uninstall(_ city: City) throws {
-        guard let url = installedURL(for: city) else { return }
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
+        for url in [localURL(cityID: city.id), city.pack.map { installedURL(cityID: city.id, version: $0.version) }].compactMap({ $0 }) {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
         }
+    }
+
+    // MARK: - Side-loading
+
+    /// What a side-loaded pack turned out to contain.
+    public struct LocalPack: Equatable, Sendable {
+        public let cityID: String
+        public let cityName: String
+        public let segmentCount: Int
+        public let totalLengthMetres: Double
+        /// Digest of the uncompressed pack. Identifies this particular pack,
+        /// which is what tells the app a different one has been installed and
+        /// coverage must be rebuilt.
+        public let sha256: String
+        public let installedURL: URL
+    }
+
+    /// Installs a pack from a file the user chose.
+    ///
+    /// This exists because a pack could otherwise only arrive by HTTPS
+    /// download, which meant anyone wanting to try a pack they had just built
+    /// had to host it for themselves first. That is a silly amount of
+    /// ceremony for a local test.
+    ///
+    /// The tradeoff is explicit: there is no published digest to check the
+    /// file against, because the catalog has none for an unbuilt city. The
+    /// file is therefore trusted to the extent that the user chose it, and no
+    /// further. Everything that can still be checked is: it must decompress,
+    /// it must open as a pack of a schema this build understands, it must
+    /// carry the city it claims, and it is opened read-only like any other.
+    public func installLocalPack(at fileURL: URL, expecting city: City) throws -> LocalPack {
+        let manager = FileManager.default
+        try manager.createDirectory(at: packsDirectory, withIntermediateDirectories: true)
+
+        let contents = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+        guard contents.count <= Self.maxCompressedBytes else {
+            throw DownloadError.tooLarge(limit: Self.maxCompressedBytes)
+        }
+
+        // Accepts the file either as the pipeline writes it or already
+        // decompressed, since decompressing first is a natural thing to do.
+        let raw: Data
+        if contents.count >= 2,
+           contents[contents.startIndex] == 0x1f,
+           contents[contents.startIndex + 1] == 0x8b {
+            raw = try GzipDecoder.decompress(contents)
+        } else {
+            raw = contents
+        }
+
+        let staging = packsDirectory.appendingPathComponent("\(city.id).\(UUID().uuidString).tmp")
+        defer { try? manager.removeItem(at: staging) }
+        try raw.write(to: staging, options: .atomic)
+
+        let store: CityPackStore
+        do {
+            store = try CityPackStore(path: staging.path)
+        } catch {
+            throw DownloadError.localPackUnreadable(error.localizedDescription)
+        }
+
+        // A pack for the wrong city would quietly credit streets in one place
+        // against a percentage for another.
+        guard store.meta.cityID == city.id else {
+            throw DownloadError.localPackForDifferentCity(
+                found: store.meta.cityName.isEmpty ? store.meta.cityID : store.meta.cityName
+            )
+        }
+
+        let digest = SHA256.hash(data: raw).map { String(format: "%02x", $0) }.joined()
+        let destination = localURL(cityID: city.id)
+
+        if manager.fileExists(atPath: destination.path) {
+            _ = try manager.replaceItemAt(destination, withItemAt: staging)
+        } else {
+            try manager.moveItem(at: staging, to: destination)
+        }
+
+        var resource = URLResourceValues()
+        resource.isExcludedFromBackup = true
+        var mutable = destination
+        try? mutable.setResourceValues(resource)
+
+        return LocalPack(
+            cityID: store.meta.cityID,
+            cityName: store.meta.cityName,
+            segmentCount: store.meta.segmentCount,
+            totalLengthMetres: store.meta.totalLengthMetres,
+            sha256: digest,
+            installedURL: destination
+        )
     }
 
     /// Older versions of a city's pack, left behind after an update.

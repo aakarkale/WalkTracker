@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The catalog: which cities can be tracked, which are downloaded, and what
 /// data the user holds for each of them.
@@ -9,6 +10,17 @@ struct CityListScreen: View {
     @Environment(\.isPresented) private var isPresented
 
     @State private var cityPendingDataDeletion: City?
+    /// The city a chosen pack file will be installed for. Held while the
+    /// document picker is up, because the picker itself has no idea which
+    /// row opened it.
+    @State private var cityAwaitingLocalPack: City?
+
+    private var packFileBinding: Binding<Bool> {
+        Binding(
+            get: { cityAwaitingLocalPack != nil },
+            set: { presented in if !presented { cityAwaitingLocalPack = nil } }
+        )
+    }
 
     private var deletionBinding: Binding<Bool> {
         Binding(
@@ -30,7 +42,8 @@ struct CityListScreen: View {
                         onSelect: { Task { await environment.selectCity(city) } },
                         onInstall: { Task { await environment.installPack(for: city) } },
                         onRemovePack: { Task { await environment.uninstallPack(for: city) } },
-                        onDeleteData: { cityPendingDataDeletion = city }
+                        onDeleteData: { cityPendingDataDeletion = city },
+                        onLoadFromFile: { cityAwaitingLocalPack = city }
                     )
                 }
 
@@ -44,10 +57,14 @@ struct CityListScreen: View {
                         .padding(.top, 8)
 
                     ForEach(environment.catalog.pending) { city in
-                        UnavailableCityCard(city: city)
+                        UnavailableCityCard(
+                            city: city,
+                            state: environment.installState(for: city),
+                            onLoadFromFile: { cityAwaitingLocalPack = city }
+                        )
                     }
 
-                    Text(String(localized: "These cities are on the list, but their street data has not been built yet, so there is nothing to download."))
+                    Text(String(localized: "These cities are on the list, but their street data has not been built yet, so there is nothing to download. If you have built a pack yourself with Tools/citypack, tap a city to load it from a file."))
                         .font(WalkType.caption)
                         .foregroundStyle(WalkPalette.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -56,6 +73,22 @@ struct CityListScreen: View {
             .padding(20)
         }
         .walkPageBackground()
+        .fileImporter(
+            isPresented: packFileBinding,
+            allowedContentTypes: [.data],
+            allowsMultipleSelection: false
+        ) { result in
+            // The city is read before the state clears: dismissing the picker
+            // resets it, and the closure can run after that.
+            guard let city = cityAwaitingLocalPack else { return }
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                Task { await environment.installLocalPack(from: url, for: city) }
+            case .failure(let error):
+                environment.report(error)
+            }
+        }
         .navigationTitle(String(localized: "Cities"))
         .toolbar {
             if isPresented {
@@ -110,6 +143,7 @@ private struct AvailableCityCard: View {
     let onInstall: () -> Void
     let onRemovePack: () -> Void
     let onDeleteData: () -> Void
+    let onLoadFromFile: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -175,6 +209,9 @@ private struct AvailableCityCard: View {
 
         case .installed:
             Menu {
+                Button(action: onLoadFromFile) {
+                    Label(String(localized: "Replace from a file"), systemImage: "doc.badge.arrow.up")
+                }
                 Button(role: .destructive, action: onRemovePack) {
                     Label(String(localized: "Remove downloaded streets"), systemImage: "trash")
                 }
@@ -244,8 +281,22 @@ private struct AvailableCityCard: View {
 private struct UnavailableCityCard: View {
 
     let city: City
+    let state: PackInstallState
+    let onLoadFromFile: () -> Void
 
     var body: some View {
+        Button(action: onLoadFromFile) {
+            cardBody
+        }
+        .buttonStyle(.plain)
+        .disabled(state.isInstalling)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "\(city.name), \(city.country)"))
+        .accessibilityValue(String(localized: "Street data not published yet. Load a pack from a file."))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var cardBody: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(city.name)
@@ -257,19 +308,20 @@ private struct UnavailableCityCard: View {
 
             Spacer(minLength: 8)
 
-            Text(String(localized: "Not published yet"))
-                .font(WalkType.label)
-                .textCase(.uppercase)
-                .kerning(0.6)
-                .foregroundStyle(WalkPalette.secondaryInk)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 10)
-                .background(Capsule(style: .continuous).fill(WalkPalette.hairline))
+            if state.isInstalling {
+                ProgressView()
+            } else {
+                Text(String(localized: "Load a pack"))
+                    .font(WalkType.label)
+                    .textCase(.uppercase)
+                    .kerning(0.6)
+                    .foregroundStyle(WalkPalette.accent)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .background(Capsule(style: .continuous).fill(WalkPalette.hairline))
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .walkCard(padding: 18)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "\(city.name), \(city.country)"))
-        .accessibilityValue(String(localized: "Street data not published yet"))
     }
 }

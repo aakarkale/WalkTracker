@@ -25,6 +25,7 @@ public final class BackupService {
 
     public enum BackupError: Error, LocalizedError {
         case notABackup
+        case unreadable(String)
         case unsupportedSchema(Int)
         case tooLarge(limit: Int)
         case restoreFailed(String)
@@ -33,6 +34,8 @@ public final class BackupService {
             switch self {
             case .notABackup:
                 return "That file is not a WalkTracker backup."
+            case .unreadable(let reason):
+                return "That backup could not be read: \(reason)"
             case .unsupportedSchema(let version):
                 return "That backup was made by a newer version of the app (format \(version))."
             case .tooLarge(let limit):
@@ -75,12 +78,28 @@ public final class BackupService {
             """,
             [.text(Self.createdAtKey), .text(ISO8601DateFormatter().string(from: Date()))]
         )
-        try database.database.checkpoint()
+        // Snapshotted through SQLite's backup API rather than copied off
+        // disk. A raw copy is only correct when the write-ahead log happens to
+        // be fully checkpointed and nothing is mid-write, and when it is wrong
+        // it produces a file that opens cleanly and is quietly missing the
+        // newest walks, which is the exact failure a backup exists to prevent.
+        let snapshot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("walktracker-snapshot-\(UUID().uuidString).sqlite")
+        defer {
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(atPath: snapshot.path + suffix)
+            }
+        }
+        try database.database.backup(toPath: snapshot.path)
 
-        let raw = try Data(contentsOf: database.fileURL, options: .mappedIfSafe)
+        let raw = try Data(contentsOf: snapshot, options: .mappedIfSafe)
         let compressed = try GzipEncoder.compress(raw)
 
         let folder = directory ?? FileManager.default.temporaryDirectory
+        // Created rather than assumed. A caller naming a folder that is not
+        // there yet is a reasonable thing to do, and failing on it produces an
+        // error about the backup file rather than about the folder.
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent(Self.suggestedFilename())
         try compressed.write(to: url, options: .atomic)
         return url
@@ -129,10 +148,19 @@ public final class BackupService {
         // trusted enough to be given a writable connection.
         let candidate = try SQLiteDatabase(path: staging.path, readOnly: true)
 
-        let marker = (try? candidate.query(
-            "SELECT value FROM app_meta WHERE key = ?",
-            [.text(Self.markerKey)]
-        ) { $0.string(0) })?.first ?? nil
+        // Read failures are reported as themselves rather than folded into
+        // "not a backup". Those are different problems with different
+        // remedies, and masking one as the other is exactly what turned a
+        // journal-mode bug into two rounds of misleading diagnostics.
+        let marker: String?
+        do {
+            marker = try candidate.query(
+                "SELECT value FROM app_meta WHERE key = ?",
+                [.text(Self.markerKey)]
+            ) { $0.string(0) }.first ?? nil
+        } catch {
+            throw BackupError.unreadable(error.localizedDescription)
+        }
         guard marker == Self.markerValue else { throw BackupError.notABackup }
 
         let schemaVersion = (try? candidate.query("PRAGMA user_version") { Int($0.int(0)) })?.first ?? 0
@@ -200,8 +228,16 @@ public final class BackupService {
             }
             try manager.moveItem(at: staging, to: destination)
 
-            // Prove it opens before the old copy is thrown away.
-            _ = try SQLiteDatabase(path: destination.path, readOnly: true)
+            // Prove it is a database before the old copy is thrown away, by
+            // reading from it. Merely opening proves nothing: SQLite opens
+            // lazily and does not look at the header until a statement runs,
+            // so a file of arbitrary bytes opens without complaint and only
+            // fails later, once the original is gone.
+            let candidate = try SQLiteDatabase(path: destination.path, readOnly: true)
+            let tables = try candidate.query("SELECT count(*) FROM sqlite_master") { Int($0.int(0)) }
+            guard let count = tables.first, count > 0 else {
+                throw BackupError.notABackup
+            }
 
             if movedAside { try? manager.removeItem(at: rollback) }
         } catch {

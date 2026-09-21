@@ -65,6 +65,23 @@ public final class InstalledPackStore {
         return existing != version
     }
 
+    /// Whether installing this exact pack would replace a different one.
+    ///
+    /// Compares the digest rather than the version, because a side-loaded pack
+    /// has no version to compare: the catalog has none for a city whose pack
+    /// has not been published. The digest identifies the pack either way, so
+    /// swapping one locally built pack for another still triggers the coverage
+    /// rebuild that pack-local segment ids make necessary.
+    public func wouldReplaceDifferentPack(cityID: String, sha256: String) throws -> Bool {
+        guard let existing = try record(forCity: cityID) else { return false }
+        return existing.sha256.caseInsensitiveCompare(sha256) != .orderedSame
+    }
+
+    /// Version recorded for a pack that came from a file rather than the
+    /// catalog. Zero is not a version the pipeline ever emits, so it reads as
+    /// "side-loaded" wherever it appears.
+    public static let sideLoadedVersion = 0
+
     public func markInstalled(_ record: Record) throws {
         try database.run(
             """

@@ -3,9 +3,11 @@
 The Xcode project is generated from `project.yml` rather than committed, so the
 first build takes one extra step.
 
-Nothing in this repository has been compiled. It was written in a Linux
-container with no Swift toolchain and no Xcode, so expect to fix compile errors
-on the first build.
+This was written in a Linux container with no Swift toolchain, so for most of
+its life none of it had been compiled. That is no longer true: CI now builds
+it on a macOS runner and runs the test suite on every push, and the first run
+found exactly two compile errors across roughly fifteen thousand lines, both
+since fixed. See `.github/workflows/ci.yml`.
 
 ## Requirements
 
@@ -84,6 +86,26 @@ carries a SHA-256 digest and a file size, both of which can only come from a
 real build, and inventing them would produce a catalog that fails verification
 the first time a download is attempted.
 
+### Trying a pack without hosting anything
+
+For a local look, you do not need a server at all. Build a pack, then load the
+file straight into the app:
+
+1. Build one with `Tools/citypack` (see its README).
+2. Run the app, open Cities, and tap the city. Every city is currently under
+   "Not yet available", and tapping one opens a file picker. On the simulator,
+   drag the `.sqlite.gz` into it first so Files can see it.
+3. The pack installs and that city becomes trackable.
+
+The app checks that the file decompresses, opens as a pack of a schema it
+understands, and carries the city you picked it for. What it cannot check is a
+published digest, because the catalog has none for a city whose pack has not
+been built. A side-loaded pack is trusted because you chose it, and it is
+stored under a different filename so a glance at the packs directory says
+which packs were verified and which were taken on your word.
+
+### Publishing packs properly
+
 To make downloads work:
 
 1. Build a pack from an OpenStreetMap extract with `Tools/citypack` (see
@@ -93,9 +115,9 @@ To make downloads work:
 3. Point `packBaseURL` in `cities.json` at where you hosted it, and paste the
    descriptor the build printed into that city's `pack` field.
 
-Until all three are done, the city list is browsable and nothing is
-downloadable. Tracking needs an installed pack, because coverage is recorded
-against the blocks in it.
+Until all three are done, nothing is downloadable, though a pack can still be
+loaded from a file as above. Tracking needs an installed pack either way,
+because coverage is recorded against the blocks in it.
 
 ## Permissions while testing
 

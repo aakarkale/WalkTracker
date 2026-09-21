@@ -75,9 +75,14 @@ final class BackupServiceTests: XCTestCase {
         try seed(sessions: 5, pointsEach: 200)
         let url = try service.export(database: database, to: directory)
 
+        // Compared against the snapshot's own uncompressed size, not against
+        // the live database file on disk. While the database is open its main
+        // file does not hold everything: recent pages live in the write-ahead
+        // log, so its byte count understates the real contents and would make
+        // this assertion meaningless.
         let compressed = try Data(contentsOf: url).count
-        let raw = try Data(contentsOf: databaseURL).count
-        XCTAssertLessThan(compressed, raw, "a backup should be smaller than the database it copies")
+        let uncompressed = try service.inspect(fileAt: url).info.uncompressedBytes
+        XCTAssertLessThan(compressed, uncompressed, "a backup should compress")
     }
 
     /// Recent writes live in the write-ahead log until it is folded back in.
@@ -114,7 +119,15 @@ final class BackupServiceTests: XCTestCase {
     /// choosing from a file browser. It has no marker, so it is refused.
     func testPlainDatabaseWithoutTheMarkerIsRefused() throws {
         let other = directory.appendingPathComponent("other.sqlite")
-        _ = try UserDatabase(fileURL: other)
+        let plain = try UserDatabase(fileURL: other)
+
+        // The case under test is a file that reads perfectly well and simply
+        // has no marker. Left in write-ahead logging it is not readable
+        // read-only at all, and this test used to pass on that error instead,
+        // which is to say it passed without testing anything. It only showed
+        // up once inspect stopped reporting every read failure as "not a
+        // backup".
+        try plain.database.execute("PRAGMA journal_mode = DELETE")
 
         XCTAssertThrowsError(try service.inspect(fileAt: other)) { error in
             guard case BackupService.BackupError.notABackup = error else {
@@ -148,6 +161,11 @@ final class BackupServiceTests: XCTestCase {
         let raised = try SQLiteDatabase(path: future.path, readOnly: false)
         try raised.execute("PRAGMA user_version = \(UserDatabase.currentSchemaVersion + 5)")
         try raised.checkpoint()
+        // Put it back to a rollback journal mode. Opening read-write switched
+        // the file into write-ahead logging, and inspect opens read-only, so
+        // without this the file is unreadable rather than merely out of date
+        // and the test would pass for the wrong reason.
+        try raised.execute("PRAGMA journal_mode = DELETE")
 
         XCTAssertThrowsError(try service.inspect(fileAt: future)) { error in
             guard case BackupService.BackupError.unsupportedSchema = error else {
@@ -208,7 +226,6 @@ final class BackupServiceTests: XCTestCase {
     /// database exactly as it was, not a half-written file.
     func testFailedRestoreLeavesTheOriginalIntact() throws {
         try seed(sessions: 3, pointsEach: 10, cityID: "vienna")
-        let before = try Data(contentsOf: databaseURL)
         database = nil
 
         XCTAssertThrowsError(
@@ -219,7 +236,10 @@ final class BackupServiceTests: XCTestCase {
         database = try UserDatabase(fileURL: databaseURL)
         let sessions = try SessionStore(database: database.database).recentSessions(cityID: nil)
         XCTAssertEqual(sessions.count, 3, "the original data should survive a failed restore")
-        XCTAssertEqual(try Data(contentsOf: databaseURL).count, before.count)
+        // Asserted on the data rather than the file size. Closing the database
+        // folds the write-ahead log back into the main file, so its byte count
+        // legitimately changes across this test and proves nothing either way.
+        XCTAssertTrue(sessions.allSatisfy { $0.cityID == "vienna" })
     }
 
     func testFailedRestoreLeavesNoStrayFilesBehind() throws {

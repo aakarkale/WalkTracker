@@ -1,0 +1,60 @@
+name: CI
+
+# Runs on every push and pull request. The repository owner has asked for
+# changes to be merged without waiting for review, so these checks are the
+# only thing standing between a change and main. They are not decoration.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Algorithms and tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Standard library only, by design. If this ever needs a pip install,
+      # something has taken on a dependency it should not have.
+      - name: Run the validation gate
+        run: ./Tools/validation/run_all.sh
+
+  build:
+    name: Build and test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Xcode project is generated rather than committed, so this has to
+      # run before anything can build.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the project
+        run: xcodegen generate
+
+      - name: Choose a simulator
+        id: sim
+        run: echo "udid=$(./Tools/ci/pick-simulator.sh)" >> "$GITHUB_OUTPUT"
+
+      # No log prettifier in the pipeline on purpose. Nothing here has ever
+      # been through a compiler, so the first runs will fail and the raw
+      # xcodebuild output is what says why.
+      - name: Build and test
+        run: |
+          xcodebuild test \
+            -project WalkTracker.xcodeproj \
+            -scheme WalkTracker \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO
