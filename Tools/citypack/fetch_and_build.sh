@@ -16,13 +16,18 @@ cd "$(dirname "$0")"
 
 # Bounding boxes are approximate and deliberately generous. Overpass clips to
 # the box, so a little slack costs a few extra streets at the edge and nothing
-# else. Order is south, west, north, east.
+# else. Order is: south west north east city-id description.
+#
+# The city id is what the app matches a pack against, so every preset uses an
+# id that exists in WalkTracker/Resources/cities.json. Building a pack under
+# an id the catalog has never heard of produces a file the app will refuse,
+# which is a confusing way to learn this.
 preset() {
     case "$1" in
-        manhattan)    echo "40.6980 -74.0250 40.8850 -73.9060  Manhattan" ;;
-        brooklyn)     echo "40.5700 -74.0420 40.7400 -73.8330  Brooklyn" ;;
-        new-york)     echo "40.4774 -74.2591 40.9176 -73.7004  New York (all five boroughs, large)" ;;
-        paris)        echo "48.8156 -2.2242 48.9022 2.4699  Paris" ;;
+        manhattan)    echo "40.6980 -74.0250 40.8850 -73.9060 new-york Manhattan only, installs as New York" ;;
+        brooklyn)     echo "40.5700 -74.0420 40.7400 -73.8330 new-york Brooklyn only, installs as New York" ;;
+        new-york)     echo "40.4774 -74.2591 40.9176 -73.7004 new-york All five boroughs, large and slow" ;;
+        paris)        echo "48.8156 2.2242 48.9022 2.4699 paris Paris" ;;
         *)            return 1 ;;
     esac
 }
@@ -30,7 +35,7 @@ preset() {
 if [ "${1:-}" = "--list" ] || [ $# -eq 0 ]; then
     echo "Presets:"
     for p in manhattan brooklyn new-york paris; do
-        printf "  %-12s %s\n" "$p" "$(preset "$p" | awk '{$1="";$2="";$3="";$4="";print substr($0,5)}')"
+        printf "  %-12s %s\n" "$p" "$(preset "$p" | cut -d' ' -f6-)"
     done
     echo
     echo "Start with manhattan. It is the smallest useful piece of New York and"
@@ -39,20 +44,40 @@ if [ "${1:-}" = "--list" ] || [ $# -eq 0 ]; then
     exit 0
 fi
 
-CITY_ID="$1"
-CITY_NAME="${2:-$1}"
+AREA="$1"
 
 if [ $# -ge 6 ]; then
+    # Explicit: area name doubles as the city id, and the catalog must have it.
+    CITY_ID="$1"; CITY_NAME="${2:-$1}"
     SOUTH="$3"; WEST="$4"; NORTH="$5"; EAST="$6"
-elif BOX=$(preset "$CITY_ID"); then
-    read -r SOUTH WEST NORTH EAST _ <<<"$BOX"
+elif BOX=$(preset "$AREA"); then
+    read -r SOUTH WEST NORTH EAST CITY_ID _ <<<"$BOX"
+    CITY_NAME="${2:-}"
+    if [ -z "$CITY_NAME" ]; then
+        CITY_NAME=$(python3 -c '
+import json, sys
+cities = json.load(open("../../WalkTracker/Resources/cities.json"))["cities"]
+print(next((c["name"] for c in cities if c["id"] == sys.argv[1]), sys.argv[1]))' "$CITY_ID")
+    fi
 else
-    echo "No preset named '$CITY_ID'. Run with --list, or pass a bounding box:" >&2
-    echo "  $0 $CITY_ID \"$CITY_NAME\" SOUTH WEST NORTH EAST" >&2
+    echo "No preset named '$AREA'. Run with --list, or pass a bounding box:" >&2
+    echo "  $0 CITY_ID \"City Name\" SOUTH WEST NORTH EAST" >&2
+    echo "CITY_ID must be one in WalkTracker/Resources/cities.json." >&2
     exit 1
 fi
 
-OSM_FILE="${CITY_ID}.osm"
+# Checked before spending minutes on a download that produces an unusable file.
+if ! python3 -c '
+import json, sys
+cities = json.load(open("../../WalkTracker/Resources/cities.json"))["cities"]
+sys.exit(0 if any(c["id"] == sys.argv[1] for c in cities) else 1)' "$CITY_ID" 2>/dev/null; then
+    echo "'$CITY_ID' is not a city in WalkTracker/Resources/cities.json." >&2
+    echo "The app refuses a pack whose city does not match the one you pick it" >&2
+    echo "for, so add an entry there first or use an id that already exists." >&2
+    exit 1
+fi
+
+OSM_FILE="${AREA}.osm"
 ENDPOINT="${OVERPASS_URL:-https://overpass-api.de/api/interpreter}"
 
 # The way filter matches the pack format's selection rules, so the download
@@ -64,7 +89,7 @@ QUERY="[out:xml][timeout:900];
 (._;>;);
 out body;"
 
-echo "Fetching ${CITY_NAME} from ${ENDPOINT}"
+echo "Fetching ${CITY_NAME} (${AREA}) from ${ENDPOINT}"
 echo "  bounding box: S ${SOUTH}  W ${WEST}  N ${NORTH}  E ${EAST}"
 echo "  This can take several minutes. Overpass queues large queries."
 echo

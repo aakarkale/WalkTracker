@@ -92,14 +92,21 @@ One command, which downloads the street data and builds the pack:
 
 ```sh
 cd Tools/citypack
-./fetch_and_build.sh manhattan "Manhattan"
+./fetch_and_build.sh manhattan
 ```
 
 `./fetch_and_build.sh --list` shows the presets. Start with Manhattan: it is
 the smallest useful piece of New York and takes a couple of minutes. All five
 boroughs is a much larger query and the public Overpass servers may refuse it.
 
-Any area works with a bounding box, given as south, west, north, east:
+Presets carry the catalog city id, so the Manhattan preset builds
+`new-york.v1.sqlite.gz` and installs against New York. That matters because
+the app checks a pack's city against the one you picked it for, and a pack
+built under an id the catalog has never heard of is refused on install.
+
+Any area works with a bounding box, given as south, west, north, east. The
+first argument is the catalog city id, which must already exist in
+`WalkTracker/Resources/cities.json`:
 
 ```sh
 ./fetch_and_build.sh lisbon "Lisbon" 38.69 -9.23 38.80 -9.09
