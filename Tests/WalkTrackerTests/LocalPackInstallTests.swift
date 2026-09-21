@@ -139,7 +139,12 @@ final class LocalPackInstallTests: XCTestCase {
             try database.run("INSERT INTO meta (key, value) VALUES (?, ?)", [.text(key), .text(value)])
         }
 
+        // The pipeline ships packs in a rollback journal mode so the file is
+        // self-contained. The fixture has to match: a WAL header sends any
+        // reader looking for a sidecar log that will not travel with the file,
+        // and a read-only reader that cannot find it fails outright.
         try database.checkpoint()
+        try database.execute("PRAGMA journal_mode = DELETE")
         return url
     }
 

@@ -93,6 +93,10 @@ public final class BackupService {
         let compressed = try GzipEncoder.compress(raw)
 
         let folder = directory ?? FileManager.default.temporaryDirectory
+        // Created rather than assumed. A caller naming a folder that is not
+        // there yet is a reasonable thing to do, and failing on it produces an
+        // error about the backup file rather than about the folder.
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent(Self.suggestedFilename())
         try compressed.write(to: url, options: .atomic)
         return url

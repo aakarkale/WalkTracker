@@ -195,6 +195,21 @@ public final class SQLiteDatabase {
             guard finished == SQLITE_OK else {
                 throw Error.stepFailed(String(cString: sqlite3_errmsg(destination)))
             }
+
+            // The copy inherits the source's journal mode, and this database
+            // runs in WAL. A WAL file is not self-contained: its header tells
+            // any reader to go looking for a sidecar log, and a snapshot is
+            // about to be moved somewhere its sidecars will not follow. A
+            // reader that cannot find or create that log fails outright, which
+            // is how a backup that looked fine turned out to be unopenable.
+            // A rollback journal mode needs no sidecar, so the file stands
+            // alone once it leaves here.
+            var errorPointer: UnsafeMutablePointer<CChar>?
+            if sqlite3_exec(destination, "PRAGMA journal_mode = DELETE", nil, nil, &errorPointer) != SQLITE_OK {
+                let message = errorPointer.map { String(cString: $0) } ?? "unknown"
+                sqlite3_free(errorPointer)
+                throw Error.stepFailed("could not make the snapshot self-contained: \(message)")
+            }
         }
     }
 
